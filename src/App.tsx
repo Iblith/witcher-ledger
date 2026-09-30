@@ -8,6 +8,7 @@ import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
 import { missingBestiary } from './model/bestiary'
+import { missingNpcPack } from './model/npcPack'
 import { derived } from './model/combat'
 import { currentEntry, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
 import { newCharacter, sampleCharacters, uid } from './model/factory'
@@ -22,6 +23,7 @@ const encounterRepo = new LocalEncounterRepository()
 type Mode = 'players' | 'npcs' | 'encounters'
 type NpcFilter = 'all' | 'mine' | 'bestiary'
 const SEEDED_KEY = `${STORAGE_PREFIX}:bestiary-seeded`
+const NPC_PACK_KEY = `${STORAGE_PREFIX}:npc-pack-1-seeded`
 
 function storageFlag(key: string, value?: string): string | null {
   try {
@@ -36,7 +38,10 @@ function initialCharacters(): Character[] {
   const list = repo.load() ?? sampleCharacters().filter((c) => c.kind === 'pc')
   // The GM's NPC list starts with the core bestiary, once; deleted entries stay deleted
   // until the GM restores them.
-  return IS_GM && !storageFlag(SEEDED_KEY) ? [...list, ...missingBestiary(list)] : list
+  if (!IS_GM) return list
+  const withBestiary = storageFlag(SEEDED_KEY) ? list : [...list, ...missingBestiary(list)]
+  // The original NPC pack arrived after the bestiary, so it has its own once-only flag.
+  return storageFlag(NPC_PACK_KEY) ? withBestiary : [...withBestiary, ...missingNpcPack(withBestiary)]
 }
 
 export default function App() {
@@ -54,7 +59,10 @@ export default function App() {
 
   useEffect(() => repo.save(characters), [characters])
   useEffect(() => {
-    if (IS_GM) storageFlag(SEEDED_KEY, '1')
+    if (IS_GM) {
+      storageFlag(SEEDED_KEY, '1')
+      storageFlag(NPC_PACK_KEY, '1')
+    }
   }, [])
   useEffect(() => encounterRepo.save(encounters), [encounters])
   const encounter = encounters.find((e) => e.id === encounterId) ?? null
