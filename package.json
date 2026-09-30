@@ -1,0 +1,31 @@
+{
+  "name": "witcher-ttrpg",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode gm",
+    "build": "tsc -b && npm run build:site && node scripts/single-file.mjs gm && node scripts/single-file.mjs player",
+    "lint": "oxlint",
+    "preview": "vite preview --outDir dist/site",
+    "test": "vitest run",
+    "build:gm": "tsc -b && vite build --mode gm",
+    "build:player": "tsc -b && vite build --mode player",
+    "dev:player": "vite --mode player",
+    "build:site": "vite build --mode gm && vite build --mode player && cp scripts/landing.html dist/site/index.html"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.2"
+  }
+}
