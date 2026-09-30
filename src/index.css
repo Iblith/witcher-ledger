@@ -96,14 +96,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   overflow-y: auto;
 }
 .brand { display: flex; gap: 12px; align-items: center; }
-.brand-mark {
-  width: 34px; height: 34px; flex: none;
-  border-radius: 50%;
-  border: 2px solid var(--gold);
-  background:
-    radial-gradient(circle at 50% 50%, transparent 38%, var(--gold) 39%, var(--gold) 44%, transparent 45%),
-    conic-gradient(from 0deg, var(--gold-soft), var(--surface), var(--gold-soft));
-}
+.brand-mark { width: 40px; height: 40px; flex: none; display: block; }
 .brand-name { font-size: 1.35rem; letter-spacing: 0.02em; line-height: 1.1; }
 .brand-sub { margin: 0; color: var(--muted); font-size: 0.85rem; }
 

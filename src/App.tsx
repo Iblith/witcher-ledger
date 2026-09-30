@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EDITION_LABEL, IS_GM, STORAGE_PREFIX } from './edition'
+// Inlined so the single-file builds carry the logo too.
+import gmMark from './assets/gm-mark.svg?inline'
+import playerMark from './assets/player-mark.svg?inline'
 import { CharacterCreator } from './components/CharacterCreator'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
@@ -100,7 +103,7 @@ export default function App() {
     <div className={'app' + (showRosterOnPhone ? ' phone-roster' : ' phone-sheet')}>
       <aside className="roster" aria-label="Characters">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <img className="brand-mark" src={IS_GM ? gmMark : playerMark} alt="" />
           <div>
             <h1 className="brand-name">Witcher Ledger</h1>
             <p className="brand-sub">{EDITION_LABEL}</p>

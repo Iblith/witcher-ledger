@@ -16,7 +16,7 @@ html = html.replace(/<link rel="stylesheet" crossorigin href="\.\/(assets\/[^"]+
   ''.concat('<style>', readFileSync(join(dir, f), 'utf8'), '</style>'),
 )
 // A single file has no manifest or icon files beside it; embed the icon and drop the rest.
-const icon = 'data:image/png;base64,' + readFileSync(join(dir, 'icons', `${edition}-192.png`)).toString('base64')
+const icon = 'data:image/png;base64,' + readFileSync(join(dir, 'icons', `${edition}-32.png`)).toString('base64')
 html = html
   .replace(/\s*<link rel="manifest"[^>]*>/, '')
   .replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '')
