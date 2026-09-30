@@ -83,7 +83,7 @@ export const SKILLS: SkillDef[] = [
 
 export const SKILL_BY_ID: Record<string, SkillDef> = Object.fromEntries(SKILLS.map((k) => [k.id, k]))
 
-export const RACES = ['Human', 'Elf', 'Dwarf', 'Witcher', 'Other'] as const
+export const RACES = ['Human', 'Elf', 'Dwarf', 'Witcher', 'Monster', 'Other'] as const
 
 export interface ProfessionDef {
   name: string

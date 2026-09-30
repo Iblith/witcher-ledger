@@ -4,6 +4,7 @@ import {
   applyDamage,
   CONDITIONS,
   entryFromCharacter,
+  entriesFromTemplate,
   entryState,
   monsterEntries,
   rollHitLocation,
@@ -392,17 +393,21 @@ function AddDialog(props: {
   const ref = useRef<HTMLDialogElement>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [m, setM] = useState<MonsterInput>(BLANK_MONSTER)
+  const beasts = props.characters.filter((c) => c.bestiary).sort((a, b) => a.bestiary!.category.localeCompare(b.bestiary!.category) || a.name.localeCompare(b.name))
+  const [beastId, setBeastId] = useState(beasts[0]?.id ?? '')
+  const [beastCount, setBeastCount] = useState(1)
+  const beast = beasts.find((c) => c.id === beastId)
   useEffect(() => {
     if (ref.current && !ref.current.open) ref.current.showModal()
   }, [])
   const setMon = (patch: Partial<MonsterInput>) => setM({ ...m, ...patch })
-  const available = [...props.characters].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+  const available = props.characters.filter((c) => !c.bestiary).sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
   return (
     <dialog ref={ref} className="dialog dialog-wide" onClose={props.onClose}>
       <h2>Add combatants</h2>
       <section className="stack">
-        <h3 className="panel-title">From your characters</h3>
-        {available.length === 0 && <p className="hint">No character sheets yet.</p>}
+        <h3 className="panel-title">Players and your NPCs</h3>
+        {available.length === 0 && <p className="hint">No players or NPCs yet.</p>}
         <ul className="pick-list">
           {available.map((c) => (
             <li key={c.id}>
@@ -435,6 +440,37 @@ function AddDialog(props: {
           </button>
         </div>
       </section>
+      {beasts.length > 0 && (
+        <>
+          <hr className="rule" />
+          <section className="stack">
+            <h3 className="panel-title">From the bestiary</h3>
+            <div className="card-fields">
+              <label className="field">
+                <span className="field-label">Creature</span>
+                <select value={beastId} onChange={(ev) => setBeastId(ev.target.value)}>
+                  {beasts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.bestiary!.category})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <NumberField label="How many" value={beastCount} min={1} max={20} onChange={setBeastCount} />
+            </div>
+            {beast && (
+              <p className="hint">
+                {beast.bestiary!.threat} · HP {beast.hp.maxOverride ?? beast.hp.current} · {beast.bestiary!.checked ? 'Checked against the book' : 'Stats not yet checked against the book'}
+              </p>
+            )}
+            <div>
+              <button type="button" className="btn btn-primary" disabled={!beast} onClick={() => beast && props.onAdd(entriesFromTemplate(beast, beastCount))}>
+                Add {beastCount > 1 ? `${beastCount} ${beast?.name ?? ''}` : beast?.name ?? ''}
+              </button>
+            </div>
+          </section>
+        </>
+      )}
       <hr className="rule" />
       <form
         className="stack"

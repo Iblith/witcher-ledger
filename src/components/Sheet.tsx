@@ -15,7 +15,6 @@ import {
   slug,
   type StatKey,
 } from '../rules/rules'
-import { IS_GM } from '../edition'
 import { activeInjuries, cap } from '../model/injuries'
 import { Injuries, LifeEvents } from './LifeAndInjuries'
 import { ConfirmButton, NumberField, NumberInput, Pool, TextArea, TextField } from './fields'
@@ -85,16 +84,6 @@ function SheetHeader({ c, set, onChange }: { c: Character; set: Setter; onChange
           value={c.name}
           onChange={(e) => set({ name: e.target.value })}
         />
-        {IS_GM && (
-        <div className="kind-toggle" role="group" aria-label="Sheet type">
-          <button type="button" aria-pressed={c.kind === 'pc'} onClick={() => set({ kind: 'pc' })}>
-            Player
-          </button>
-          <button type="button" aria-pressed={c.kind === 'npc'} onClick={() => set({ kind: 'npc' })}>
-            NPC
-          </button>
-        </div>
-        )}
       </div>
       <div className="grid-identity">
         {c.kind === 'pc' && <TextField label="Player" value={c.player} onChange={(v) => set({ player: v })} />}

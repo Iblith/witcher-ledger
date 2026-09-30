@@ -1,46 +1,79 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { EDITION_LABEL, IS_GM } from './edition'
+import { EDITION_LABEL, IS_GM, STORAGE_PREFIX } from './edition'
 import { CharacterCreator } from './components/CharacterCreator'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
+import { missingBestiary } from './model/bestiary'
 import { derived } from './model/combat'
 import { currentEntry, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
 import { newCharacter, sampleCharacters, uid } from './model/factory'
-import type { Character, CharacterKind } from './model/types'
+import type { Character } from './model/types'
 import { rollCheck, rollFlat, type CheckRoll } from './rules/dice'
 import { exportJson, LocalEncounterRepository, LocalStorageRepository, parseCharacters } from './storage/store'
 
 const repo = new LocalStorageRepository()
 const encounterRepo = new LocalEncounterRepository()
-type Filter = 'all' | CharacterKind
-type Mode = 'characters' | 'encounters'
+// GM sections: imported player sheets, the GM's own NPCs plus the bestiary, and fights.
+// The Player version only ever shows 'players' (its own characters).
+type Mode = 'players' | 'npcs' | 'encounters'
+type NpcFilter = 'all' | 'mine' | 'bestiary'
+const SEEDED_KEY = `${STORAGE_PREFIX}:bestiary-seeded`
+
+function storageFlag(key: string, value?: string): string | null {
+  try {
+    if (value !== undefined) localStorage.setItem(key, value)
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function initialCharacters(): Character[] {
+  const list = repo.load() ?? sampleCharacters().filter((c) => c.kind === 'pc')
+  // The GM's NPC list starts with the core bestiary, once; deleted entries stay deleted
+  // until the GM restores them.
+  return IS_GM && !storageFlag(SEEDED_KEY) ? [...list, ...missingBestiary(list)] : list
+}
 
 export default function App() {
-  const [characters, setCharacters] = useState<Character[]>(
-    () => repo.load() ?? sampleCharacters().filter((c) => IS_GM || c.kind === 'pc'),
-  )
-  const [selectedId, setSelectedId] = useState<string | null>(() => characters[0]?.id ?? null)
-  const [filter, setFilter] = useState<Filter>('all')
+  const [characters, setCharacters] = useState<Character[]>(initialCharacters)
+  const [selectedId, setSelectedId] = useState<string | null>(() => characters.find((c) => c.kind === 'pc')?.id ?? null)
+  const [npcFilter, setNpcFilter] = useState<NpcFilter>('all')
+  const [query, setQuery] = useState('')
   const [rolls, setRolls] = useState<CheckRoll[]>([])
   const [transfer, setTransfer] = useState<null | { mode: 'export'; ids: string[] } | { mode: 'import' }>(null)
   const [showRosterOnPhone, setShowRosterOnPhone] = useState(true)
-  const [mode, setMode] = useState<Mode>('characters')
+  const [mode, setMode] = useState<Mode>('players')
   const [creating, setCreating] = useState(false)
   const [encounters, setEncounters] = useState<Encounter[]>(() => encounterRepo.load() ?? (IS_GM ? [sampleEncounter(characters)] : []))
   const [encounterId, setEncounterId] = useState<string | null>(() => encounters[0]?.id ?? null)
 
   useEffect(() => repo.save(characters), [characters])
+  useEffect(() => {
+    if (IS_GM) storageFlag(SEEDED_KEY, '1')
+  }, [])
   useEffect(() => encounterRepo.save(encounters), [encounters])
   const encounter = encounters.find((e) => e.id === encounterId) ?? null
   const updateEncounter = (e: Encounter) =>
     setEncounters((list) => list.map((x) => (x.id === e.id ? { ...e, updatedAt: Date.now() } : x)))
 
-  const selected = characters.find((c) => c.id === selectedId) ?? null
-  const visible = useMemo(
-    () => characters.filter((c) => !IS_GM || filter === 'all' || c.kind === filter).sort((a, b) => a.name.localeCompare(b.name)),
-    [characters, filter],
-  )
+  const inSection = (c: Character) => !IS_GM || (mode === 'players' ? c.kind === 'pc' : c.kind === 'npc')
+  const selected = characters.find((c) => c.id === selectedId && inSection(c)) ?? null
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return characters
+      .filter((c) => {
+        if (!IS_GM) return true
+        if (mode === 'players') return c.kind === 'pc'
+        if (c.kind !== 'npc') return false
+        if (npcFilter === 'mine' && c.bestiary) return false
+        if (npcFilter === 'bestiary' && !c.bestiary) return false
+        return !q || c.name.toLowerCase().includes(q) || (c.bestiary?.category.toLowerCase().includes(q) ?? false)
+      })
+      .sort((a, b) => Number(!!a.bestiary) - Number(!!b.bestiary) || a.name.localeCompare(b.name))
+  }, [characters, mode, npcFilter, query])
+  const missing = IS_GM && mode === 'npcs' ? missingBestiary(characters) : []
 
   const update = (c: Character) =>
     setCharacters((list) => list.map((x) => (x.id === c.id ? { ...c, updatedAt: Date.now() } : x)))
@@ -51,7 +84,7 @@ export default function App() {
     setShowRosterOnPhone(false)
   }
   const startCreator = () => {
-    setMode('characters')
+    setMode('players')
     setCreating(true)
     setShowRosterOnPhone(false)
   }
@@ -75,8 +108,11 @@ export default function App() {
         </div>
         {IS_GM && (
         <div className="mode-switch" role="tablist" aria-label="Section">
-          <button type="button" role="tab" aria-selected={mode === 'characters'} onClick={() => setMode('characters')}>
-            Characters
+          <button type="button" role="tab" aria-selected={mode === 'players'} onClick={() => setMode('players')}>
+            Players
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'npcs'} onClick={() => setMode('npcs')}>
+            NPCs
           </button>
           <button type="button" role="tab" aria-selected={mode === 'encounters'} onClick={() => setMode('encounters')}>
             Encounters
@@ -100,20 +136,23 @@ export default function App() {
           />
         ) : (
         <>
-        {IS_GM && (
-        <div className="seg" role="group" aria-label="Filter characters">
+        {IS_GM && mode === 'npcs' && (
+        <>
+        <div className="seg" role="group" aria-label="Filter NPCs">
           {(
             [
               ['all', 'All'],
-              ['pc', 'Players'],
-              ['npc', 'NPCs'],
+              ['mine', 'My NPCs'],
+              ['bestiary', 'Bestiary'],
             ] as const
           ).map(([f, label]) => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+            <button key={f} type="button" aria-pressed={npcFilter === f} onClick={() => setNpcFilter(f)}>
               {label}
             </button>
           ))}
         </div>
+        <input className="roster-search" type="search" aria-label="Search NPCs" placeholder="Search name or type" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </>
         )}
         <ul className="roster-list">
           {visible.map((c) => {
@@ -131,8 +170,8 @@ export default function App() {
                 >
                   <span className="roster-name">{c.name || 'Unnamed'}</span>
                   <span className="roster-meta">
-                    {IS_GM && <span className={'kind-pill kind-' + c.kind}>{c.kind === 'pc' ? 'Player' : 'NPC'}</span>}
-                    {[IS_GM && c.kind === 'pc' ? c.player : '', c.race, c.profession].filter(Boolean).join(' · ')}
+                    {c.bestiary && <span className="kind-pill kind-beast">{c.bestiary.category}</span>}
+                    {(c.bestiary ? [c.bestiary.threat] : [IS_GM ? c.player : '', c.race, c.profession]).filter(Boolean).join(' · ')}
                   </span>
                   <span className={'roster-hp' + (c.hp.current <= d.maxHp / 4 ? ' roster-hp-low' : '')}>
                     HP {c.hp.current}/{d.maxHp}
@@ -141,18 +180,26 @@ export default function App() {
               </li>
             )
           })}
-          {visible.length === 0 && <li className="hint">No characters here yet.</li>}
+          {visible.length === 0 && (
+            <li className="hint">
+              {IS_GM && mode === 'players' ? 'No players yet. Ask them to tap Send to GM in the Player version, then use Import players.' : 'No characters here yet.'}
+            </li>
+          )}
         </ul>
         <div className="roster-actions">
           {IS_GM ? (
-            <>
-              <button type="button" className="btn btn-primary" onClick={() => add(newCharacter(filter === 'pc' ? 'pc' : 'npc'))}>
-                {filter === 'pc' ? 'New player character' : 'New NPC'}
-              </button>
-              <button type="button" className="btn" onClick={startCreator}>
-                Guided creator
-              </button>
-            </>
+            mode === 'npcs' ? (
+              <>
+                <button type="button" className="btn btn-primary" onClick={() => add(newCharacter('npc'))}>
+                  New NPC
+                </button>
+                {missing.length > 0 && (
+                  <button type="button" className="btn" onClick={() => setCharacters((list) => [...list, ...missingBestiary(list)])}>
+                    Restore bestiary ({missing.length})
+                  </button>
+                )}
+              </>
+            ) : null
           ) : (
             <>
               <button type="button" className="btn btn-primary" onClick={startCreator}>
@@ -163,7 +210,7 @@ export default function App() {
               </button>
             </>
           )}
-          <button type="button" className="btn" onClick={() => setTransfer({ mode: 'import' })}>
+          <button type="button" className={'btn' + (IS_GM && mode === 'players' ? ' btn-primary' : '')} onClick={() => setTransfer({ mode: 'import' })}>
             {IS_GM ? 'Import players' : 'Import'}
           </button>
           <button type="button" className="btn" onClick={() => setTransfer({ mode: 'export', ids: characters.map((c) => c.id) })}>
@@ -222,23 +269,33 @@ export default function App() {
           <>
             <div className="sheet-toolbar">
               <button type="button" className="btn btn-quiet phone-only" onClick={() => setShowRosterOnPhone(true)}>
-                ← Characters
+                ← {IS_GM ? (mode === 'players' ? 'Players' : 'NPCs') : 'Characters'}
               </button>
               <span className="toolbar-spacer" />
-              <button type="button" className="btn btn-quiet" onClick={() => add({ ...structuredClone(selected), id: uid(), name: selected.name + ' (copy)' })}>
-                Duplicate
+              {(!IS_GM || selected.kind === 'npc') && (
+              <button
+                type="button"
+                className="btn btn-quiet"
+                onClick={() => add({ ...structuredClone(selected), id: uid(), name: selected.name + (selected.bestiary ? '' : ' (copy)'), bestiary: undefined })}
+              >
+                {selected.bestiary ? 'Copy to my NPCs' : 'Duplicate'}
               </button>
+              )}
               <button type="button" className="btn btn-quiet" onClick={() => setTransfer({ mode: 'export', ids: [selected.id] })}>
                 {IS_GM ? 'Export' : 'Send to GM'}
               </button>
               <ConfirmButton key={selected.id} label="Delete" confirmLabel={`Delete ${selected.name || 'character'}`} onConfirm={() => remove(selected.id)} />
             </div>
+            {selected.bestiary && <BestiaryNote c={selected} onChange={update} />}
+            {IS_GM && selected.kind === 'pc' && (
+              <p className="hint imported-note">Imported from {selected.player || 'the player'}. Importing their next export replaces this copy, including anything you changed here.</p>
+            )}
             <Sheet character={selected} onChange={update} onRoll={roll} />
           </>
         ) : (
           <div className="empty">
-            <h2>No character open</h2>
-            <p>Pick someone from the list or create a new sheet.</p>
+            <h2>{IS_GM ? (mode === 'players' ? 'No player open' : 'No NPC open') : 'No character open'}</h2>
+            <p>{IS_GM && mode === 'players' ? 'Pick a player from the list, or import one.' : 'Pick someone from the list or create a new sheet.'}</p>
           </div>
         )}
       </main>
@@ -263,6 +320,31 @@ export default function App() {
         />
       )}
     </div>
+  )
+}
+
+function BestiaryNote({ c, onChange }: { c: Character; onChange: (c: Character) => void }) {
+  const b = c.bestiary!
+  return (
+    <section className={'panel bestiary-note' + (b.checked ? ' bestiary-checked' : '')}>
+      <div className="bestiary-head">
+        <strong>
+          {b.category} · {b.threat}
+          {b.page ? ` · core rulebook p. ${b.page}` : ''}
+        </strong>
+        <span className={'sev-pill ' + (b.checked ? 'sev-simple' : 'sev-complex')}>{b.checked ? 'Checked' : 'Estimated stats'}</span>
+      </div>
+      <p className="hint">
+        {b.checked
+          ? 'You marked these stats as checked against your book.'
+          : 'These numbers are estimates, not copied from the core rulebook. Compare them with your book and fix anything that differs.'}
+      </p>
+      {b.confirmed && <p className="hint">Confirmed by the errata: {b.confirmed}</p>}
+      <label className="check">
+        <input type="checkbox" checked={b.checked} onChange={(e) => onChange({ ...c, bestiary: { ...b, checked: e.target.checked } })} />
+        I've checked these stats against my book
+      </label>
+    </section>
   )
 }
 

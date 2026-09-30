@@ -80,6 +80,18 @@ export interface Spell {
   effect: string
 }
 
+// Where a GM's NPC came from when it was seeded from the core rulebook bestiary.
+export interface BestiaryInfo {
+  category: string
+  threat: string
+  // Core rulebook page, only where the errata cites one.
+  page: number | null
+  // What the v4 errata confirms about this creature. Everything else is an estimate.
+  confirmed: string
+  // The GM ticks this once they have compared the stats with their book.
+  checked: boolean
+}
+
 export interface Character {
   id: string
   schema: number
@@ -114,6 +126,7 @@ export interface Character {
   background: string
   notes: string
   ip: number
+  bestiary?: BestiaryInfo
   createdAt: number
   updatedAt: number
 }

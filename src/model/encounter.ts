@@ -104,6 +104,24 @@ export function entryFromCharacter(c: Character): EncounterEntry {
   }
 }
 
+// Copies of a bestiary or NPC sheet as independent monsters: damage to them never touches the
+// template sheet when wounds are saved back.
+export function entriesFromTemplate(c: Character, count: number): EncounterEntry[] {
+  const n = Math.max(1, Math.floor(count))
+  return Array.from({ length: n }, (_, i) => {
+    const e = entryFromCharacter(c)
+    return {
+      ...e,
+      characterId: null,
+      kind: 'monster' as const,
+      name: n > 1 ? `${c.name} ${i + 1}` : c.name,
+      hp: { current: e.hp.max, max: e.hp.max },
+      sta: { current: e.sta.max, max: e.sta.max },
+      notes: c.bestiary ? c.bestiary.threat : '',
+    }
+  })
+}
+
 export interface MonsterInput {
   name: string
   count: number

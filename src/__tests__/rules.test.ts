@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { rollCheck } from '../rules/dice'
-import { derive, type Stats } from '../rules/rules'
-import { checkBase, toCombatant } from '../model/combat'
+import { derive, SKILL_BY_ID, type Stats } from '../rules/rules'
+import { checkBase, derived, toCombatant } from '../model/combat'
+import { BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
 import { newCharacter, sampleCharacters } from '../model/factory'
 import { exportJson, LocalStorageRepository, parseCharacters } from '../storage/store'
 
@@ -71,7 +72,7 @@ describe('storage', () => {
   })
 })
 
-import { advanceTurn, applyDamage, entryFromCharacter, monsterEntries, rollHitLocation, rollInitiative, turnOrder, writeBack, newEncounter } from '../model/encounter'
+import { advanceTurn, applyDamage, entriesFromTemplate, entryFromCharacter, monsterEntries, rollHitLocation, rollInitiative, turnOrder, writeBack, newEncounter } from '../model/encounter'
 
 describe('encounters', () => {
   const [witcher] = sampleCharacters()
@@ -178,5 +179,31 @@ describe('character creator', () => {
     const c = finishDraft(d)
     expect(c.lifeEvents.map((e) => [e.kind, e.title])).toEqual([['Family', 'Family fate'], ['Enemy', 'Made an enemy']])
     expect([c.hp.current, c.sta.current, c.luckCurrent]).toEqual([35, 35, 12])
+  })
+})
+
+describe('bestiary', () => {
+  it('seeds NPC sheets with valid skills, unique ids and fixed HP', () => {
+    const list = BESTIARY.map(bestiaryCharacter)
+    expect(new Set(list.map((c) => c.id)).size).toBe(list.length)
+    for (const c of list) {
+      expect(c.kind).toBe('npc')
+      for (const id of Object.keys(c.skills)) expect(SKILL_BY_ID[id], `${c.name}: ${id}`).toBeDefined()
+      for (const w of c.weapons) expect(SKILL_BY_ID[w.skillId], `${c.name}: ${w.name}`).toBeDefined()
+      expect(derived(c).maxHp).toBe(c.hp.current)
+      expect(c.bestiary?.checked).toBe(false)
+    }
+  })
+
+  it('restores only missing entries and adds fight copies that never write back', () => {
+    const all = BESTIARY.map(bestiaryCharacter)
+    expect(missingBestiary(all)).toHaveLength(0)
+    expect(missingBestiary(all.slice(1)).map((c) => c.name)).toEqual([all[0].name])
+    const ghoul = all.find((c) => c.name === 'Ghoul')!
+    const entries = entriesFromTemplate(ghoul, 3)
+    expect(entries.map((e) => e.name)).toEqual(['Ghoul 1', 'Ghoul 2', 'Ghoul 3'])
+    expect(entries.every((e) => e.characterId === null && e.kind === 'monster' && e.hp.current === ghoul.hp.current)).toBe(true)
+    // Ghoul RUN is 18 per the errata.
+    expect(derived(ghoul).run).toBe(18)
   })
 })

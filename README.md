@@ -5,7 +5,7 @@ Character sheets and a GM encounter tracker for The Witcher TTRPG.
 ## Two versions
 
 - **Player**: create and manage your own characters, then "Send to GM" (copy or file).
-- **GM**: NPCs, "Import players" to load player sheets, and the encounter tracker.
+- **GM**: Players (imported sheets only, via "Import players"), NPCs seeded with a core-rulebook bestiary (estimated stats; see `src/model/bestiary.ts`), and the encounter tracker.
 
 Both install on phones (Add to Home Screen) and work offline once hosted over https.
 Data stays on the device in browser storage; there is no login.

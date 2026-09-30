@@ -133,6 +133,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 }
 .kind-pc { color: var(--steel); }
 .kind-npc { color: var(--gold); }
+.kind-beast { color: var(--muted); }
+.roster-search { width: 100%; }
+/* Long lists (the bestiary) scroll the roster instead of squashing its controls. */
+.roster { overflow-y: auto; }
+.roster > * { flex-shrink: 0; }
+.bestiary-note { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; border-left: 4px solid var(--gold); }
+.bestiary-checked { border-left-color: var(--steel); }
+.bestiary-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.imported-note { margin-bottom: 12px; }
 .roster-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .roster-actions .btn-primary { flex-basis: 100%; }
 
