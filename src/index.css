@@ -212,6 +212,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .panel-title { font-size: 1.15rem; display: flex; align-items: baseline; gap: 10px; }
 .row-fields { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .row-fields > .field { flex: 1 1 160px; }
+.row-fields > .field-stack { flex: 1 1 160px; display: flex; flex-direction: column; gap: 10px; }
+.gear-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
 
 /* Pools */
 .pools { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }

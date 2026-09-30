@@ -17,6 +17,18 @@ import {
   type CreatorDraft,
 } from '../model/creator'
 import { applyProfession, uid } from '../model/factory'
+import {
+  DEFAULT_HOMELAND,
+  HOMELANDS,
+  homelandLanguage,
+  LANGUAGE_NAMES,
+  LANGUAGE_SKILLS,
+  perksText,
+  PROFESSION_GEAR,
+  professionSkillIds,
+  STARTING_GEAR_NOTE,
+  WITCHER_SCHOOLS,
+} from '../model/presets'
 import type { Character, LifeEventKind } from '../model/types'
 import { rollD10 } from '../rules/dice'
 import { derive, PROFESSIONS, SKILLS, STAT_KEYS, STAT_NAMES, type StatKey } from '../rules/rules'
@@ -106,7 +118,7 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
 
       <div className="creator-body">
         {d.step === 0 && <Basics d={d} setC={setC} />}
-        {d.step === 1 && <Race d={d} setC={setC} />}
+        {d.step === 1 && <Race d={d} setD={setD} />}
         {d.step === 2 && <Profession d={d} setD={setD} />}
         {d.step === 3 && <Statistics d={d} setD={setD} setC={setC} />}
         {d.step === 4 && <Skills d={d} setD={setD} setC={setC} />}
@@ -183,19 +195,86 @@ function Basics({ d, setC }: Omit<StepProps, 'setD'>) {
   )
 }
 
-function Race({ d, setC }: Omit<StepProps, 'setD'>) {
-  const c = d.character
+// A dropdown of known options with an "Other" choice that opens a text box for anything else.
+function PickOrType({
+  label,
+  value,
+  onChange,
+  groups,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  groups: Array<{ label?: string; options: string[] }>
+  placeholder?: string
+}) {
+  const known = groups.some((g) => g.options.includes(value))
+  const [other, setOther] = useState(!known && value !== '')
+  const showText = other || (!known && value !== '')
   return (
-    <Step title="Choose your race" intro="Your race sets your perks. Copy the perks from the race section of the core rulebook into the box below.">
+    <div className="field-stack">
+      <label className="field">
+        <span className="field-label">{label}</span>
+        <select
+          value={showText ? OTHER : value}
+          onChange={(e) => {
+            const v = e.target.value
+            setOther(v === OTHER)
+            onChange(v === OTHER ? '' : v)
+          }}
+        >
+          <option value="">Choose…</option>
+          {groups.map((g, i) =>
+            g.label ? (
+              <optgroup key={i} label={g.label}>
+                {g.options.map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
+              </optgroup>
+            ) : (
+              g.options.map((o) => <option key={o}>{o}</option>)
+            ),
+          )}
+          <option value={OTHER}>Other…</option>
+        </select>
+      </label>
+      {showText && <TextField label={`${label} (other)`} value={value} onChange={onChange} placeholder={placeholder} />}
+    </div>
+  )
+}
+
+const OTHER = '__other__'
+
+const HOMELAND_GROUPS = HOMELANDS.reduce<Array<{ label: string; options: string[] }>>((acc, g) => {
+  const same = acc.find((x) => x.label === g.region)
+  if (same) same.options.push(...g.homelands)
+  else acc.push({ label: g.region, options: [...g.homelands] })
+  return acc
+}, [])
+
+function Race({ d, setD }: Omit<StepProps, 'setC'>) {
+  const c = d.character
+  const lang = homelandLanguage(c.homeland)
+  const pickRace = (race: string) => {
+    // Swap in the new race's perks and usual homeland unless the player already wrote their own.
+    const perks = !c.perks.trim() || c.perks === perksText(c.race) ? perksText(race) : c.perks
+    const wasDefault = !c.homeland || c.homeland === DEFAULT_HOMELAND[c.race]
+    const homeland = wasDefault ? (DEFAULT_HOMELAND[race] ?? '') : c.homeland
+    setHomeland({ ...c, race, perks, school: race === 'Witcher' ? c.school : '' }, homeland)
+  }
+  // The profession's "Language" skill follows the homeland, so move its star when the homeland changes.
+  const setHomeland = (next: Character, homeland: string) => {
+    const from = LANGUAGE_SKILLS[homelandLanguage(c.homeland) ?? 'common']
+    const to = LANGUAGE_SKILLS[homelandLanguage(homeland) ?? 'common']
+    const professionSkills = d.professionSkills.map((id) => (id === from ? to : id))
+    setD({ ...d, professionSkills: [...new Set(professionSkills)], character: { ...next, homeland } })
+  }
+  return (
+    <Step title="Choose your race" intro="Your race sets your perks, which are filled in for you. Edit them if your table plays them differently.">
       <div className="choice-grid">
         {Object.entries(RACE_INFO).map(([race, text]) => (
-          <button
-            key={race}
-            type="button"
-            className={'choice' + (c.race === race ? ' choice-on' : '')}
-            aria-pressed={c.race === race}
-            onClick={() => setC({ race, school: race === 'Witcher' ? c.school : '' })}
-          >
+          <button key={race} type="button" className={'choice' + (c.race === race ? ' choice-on' : '')} aria-pressed={c.race === race} onClick={() => pickRace(race)}>
             <strong>{race}</strong>
             <span>{text}</span>
           </button>
@@ -203,10 +282,13 @@ function Race({ d, setC }: Omit<StepProps, 'setD'>) {
       </div>
       <div className="panel">
         <div className="row-fields">
-          <TextField label="Homeland" value={c.homeland} onChange={(v) => setC({ homeland: v })} placeholder="e.g. Temeria, Nilfgaard, Mahakam" />
-          {c.race === 'Witcher' && <TextField label="School" value={c.school} onChange={(v) => setC({ school: v })} placeholder="Wolf, Cat, Griffin…" />}
+          <PickOrType label="Homeland" value={c.homeland} onChange={(v) => setHomeland(c, v)} groups={HOMELAND_GROUPS} placeholder="Where you grew up" />
+          {c.race === 'Witcher' && (
+            <PickOrType label="School" value={c.school} onChange={(v) => setD({ ...d, character: { ...c, school: v } })} groups={[{ options: WITCHER_SCHOOLS }]} placeholder="School name" />
+          )}
         </div>
-        <TextArea label="Racial perks" rows={3} value={c.perks} onChange={(v) => setC({ perks: v })} />
+        {lang && <p className="hint">Native language: {LANGUAGE_NAMES[lang]}.</p>}
+        <TextArea label="Racial perks" rows={4} value={c.perks} onChange={(v) => setD({ ...d, character: { ...c, perks: v } })} />
       </div>
     </Step>
   )
@@ -215,7 +297,7 @@ function Race({ d, setC }: Omit<StepProps, 'setD'>) {
 function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
   const c = d.character
   return (
-    <Step title="Choose your profession" intro="Your profession gives you a defining skill and the skills you'll spend profession points on.">
+    <Step title="Choose your profession" intro="Your profession gives you a defining skill, ten profession skills (starred for you on the Skills step) and starting gear.">
       <div className="choice-grid">
         {PROFESSIONS.map((p) => (
           <button
@@ -226,8 +308,13 @@ function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
             onClick={() => {
               const next = applyProfession(c, p.name)
               next.crowns = STARTING_CROWNS[p.name] ?? next.crowns
-              if (p.name === 'Witcher') next.race = 'Witcher'
-              setD({ ...d, character: next })
+              if (p.name === 'Witcher' && c.race !== 'Witcher') {
+                next.race = 'Witcher'
+                if (!c.perks.trim() || c.perks === perksText(c.race)) next.perks = perksText('Witcher')
+              }
+              // A new profession brings its own skill list and gear, so the old picks go.
+              if (p.name !== c.profession) next.items = c.items.filter((i) => i.notes !== STARTING_GEAR_NOTE)
+              setD({ ...d, character: next, professionSkills: professionSkillIds(p.name, c.homeland) })
             }}
           >
             <strong>{p.name}</strong>
@@ -338,7 +425,7 @@ function Skills({ d, setD, setC }: StepProps) {
       title="Train your skills"
       intro={
         <>
-          Star the skills your profession lists in the rulebook; those and your defining skill spend the {PROFESSION_SKILL_POINTS} profession points.
+          Your profession's skills are starred; those and your defining skill spend the {PROFESSION_SKILL_POINTS} profession points. Tap a star to change the list.
           Everything else uses pick-up points (INT + REF). No skill can start above {b.cap}.
         </>
       }
@@ -473,7 +560,8 @@ function Gear({ d, setC }: Omit<StepProps, 'setD'>) {
   const c = d.character
   const [name, setName] = useState('')
   return (
-    <Step title="Gear and coin" intro="Note the gear your profession gives you, plus your starting crowns. Weapons and armor go on the Combat tab once the sheet is made.">
+    <Step title="Gear and coin" intro="Pick your profession's starting gear, then add anything you buy with your crowns. Weapon and armor stats go on the Combat tab once the sheet is made.">
+      <StartingGear d={d} setC={setC} />
       <div className="panel row-fields">
         <label className="field">
           <span className="field-label">Crowns</span>
@@ -510,6 +598,39 @@ function Gear({ d, setC }: Omit<StepProps, 'setD'>) {
         )}
       </form>
     </Step>
+  )
+}
+
+function StartingGear({ d, setC }: Omit<StepProps, 'setD'>) {
+  const c = d.character
+  const gear = PROFESSION_GEAR[c.profession]
+  if (!gear) return <p className="hint">Choose a profession to see its starting gear.</p>
+  const picked = new Set(c.items.filter((i) => i.notes === STARTING_GEAR_NOTE).map((i) => i.name))
+  const toggle = (name: string, qty = 1) => {
+    if (picked.has(name)) setC({ items: c.items.filter((i) => !(i.notes === STARTING_GEAR_NOTE && i.name === name)) })
+    else setC({ items: [...c.items, { id: uid(), name, qty, weight: 0, notes: STARTING_GEAR_NOTE }] })
+  }
+  return (
+    <section className="panel">
+      <div className="gear-head">
+        <h3 className="panel-title">{c.profession} starting gear</h3>
+        <Budget label="Picks left" left={gear.pick - picked.size} total={gear.pick} />
+      </div>
+      <ul className="pick-list">
+        {gear.options.map((o) => {
+          const on = picked.has(o.name)
+          return (
+            <li key={o.name}>
+              <label className="check">
+                <input type="checkbox" checked={on} disabled={!on && picked.size >= gear.pick} onChange={() => toggle(o.name, o.qty)} />
+                {o.name}
+                {o.qty && o.qty > 1 ? ` ×${o.qty}` : ''}
+              </label>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 

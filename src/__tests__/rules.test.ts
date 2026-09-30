@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rollCheck } from '../rules/dice'
-import { derive, SKILL_BY_ID, type Stats } from '../rules/rules'
+import { derive, PROFESSIONS, SKILL_BY_ID, type Stats } from '../rules/rules'
+import { PROFESSION_GEAR, professionSkillIds } from '../model/presets'
 import { checkBase, derived, toCombatant } from '../model/combat'
 import { BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
 import { newCharacter, sampleCharacters } from '../model/factory'
@@ -205,5 +206,23 @@ describe('bestiary', () => {
     expect(entries.every((e) => e.characterId === null && e.kind === 'monster' && e.hp.current === ghoul.hp.current)).toBe(true)
     // Ghoul RUN is 18 per the errata.
     expect(derived(ghoul).run).toBe(18)
+  })
+})
+
+describe('creator presets', () => {
+  it('lists ten real skills for every profession', () => {
+    for (const p of PROFESSIONS) {
+      const ids = professionSkillIds(p.name, 'Redania')
+      expect(ids, p.name).toHaveLength(10)
+      for (const id of ids) expect(SKILL_BY_ID[id], `${p.name}: ${id}`).toBeDefined()
+    }
+  })
+  it('uses the homeland language for "Language"', () => {
+    expect(professionSkillIds('Bard', 'Mahakam')).toContain('language-dwarven')
+    expect(professionSkillIds('Bard', 'Vicovaro')).toContain('language-elder-speech')
+    expect(professionSkillIds('Bard', '')).toContain('language-common-speech')
+  })
+  it('has gear to pick for every profession', () => {
+    for (const p of PROFESSIONS) expect(PROFESSION_GEAR[p.name].options.length, p.name).toBeGreaterThanOrEqual(PROFESSION_GEAR[p.name].pick)
   })
 })
