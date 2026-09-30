@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EDITION_LABEL, IS_GM } from './edition'
+import { CharacterCreator } from './components/CharacterCreator'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
@@ -25,6 +26,7 @@ export default function App() {
   const [transfer, setTransfer] = useState<null | { mode: 'export'; ids: string[] } | { mode: 'import' }>(null)
   const [showRosterOnPhone, setShowRosterOnPhone] = useState(true)
   const [mode, setMode] = useState<Mode>('characters')
+  const [creating, setCreating] = useState(false)
   const [encounters, setEncounters] = useState<Encounter[]>(() => encounterRepo.load() ?? (IS_GM ? [sampleEncounter(characters)] : []))
   const [encounterId, setEncounterId] = useState<string | null>(() => encounters[0]?.id ?? null)
 
@@ -43,8 +45,14 @@ export default function App() {
   const update = (c: Character) =>
     setCharacters((list) => list.map((x) => (x.id === c.id ? { ...c, updatedAt: Date.now() } : x)))
   const add = (c: Character) => {
+    setCreating(false)
     setCharacters((list) => [...list, c])
     setSelectedId(c.id)
+    setShowRosterOnPhone(false)
+  }
+  const startCreator = () => {
+    setMode('characters')
+    setCreating(true)
     setShowRosterOnPhone(false)
   }
   const remove = (id: string) => {
@@ -117,6 +125,7 @@ export default function App() {
                   className={'roster-item' + (c.id === selectedId ? ' roster-active' : '')}
                   onClick={() => {
                     setSelectedId(c.id)
+                    setCreating(false)
                     setShowRosterOnPhone(false)
                   }}
                 >
@@ -135,9 +144,25 @@ export default function App() {
           {visible.length === 0 && <li className="hint">No characters here yet.</li>}
         </ul>
         <div className="roster-actions">
-          <button type="button" className="btn btn-primary" onClick={() => add(newCharacter(IS_GM && filter !== 'pc' ? 'npc' : 'pc'))}>
-            {IS_GM ? (filter === 'pc' ? 'New player character' : 'New NPC') : 'New character'}
-          </button>
+          {IS_GM ? (
+            <>
+              <button type="button" className="btn btn-primary" onClick={() => add(newCharacter(filter === 'pc' ? 'pc' : 'npc'))}>
+                {filter === 'pc' ? 'New player character' : 'New NPC'}
+              </button>
+              <button type="button" className="btn" onClick={startCreator}>
+                Guided creator
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-primary" onClick={startCreator}>
+                Create a character
+              </button>
+              <button type="button" className="btn" onClick={() => add(newCharacter('pc'))}>
+                Blank sheet
+              </button>
+            </>
+          )}
           <button type="button" className="btn" onClick={() => setTransfer({ mode: 'import' })}>
             {IS_GM ? 'Import players' : 'Import'}
           </button>
@@ -184,6 +209,15 @@ export default function App() {
               <p>Pick a fight from the list or start a new one.</p>
             </div>
           )
+        ) : creating ? (
+          <>
+            <div className="sheet-toolbar phone-only-bar">
+              <button type="button" className="btn btn-quiet phone-only" onClick={() => setShowRosterOnPhone(true)}>
+                ← Characters
+              </button>
+            </div>
+            <CharacterCreator onCreate={add} onCancel={() => setCreating(false)} />
+          </>
         ) : selected ? (
           <>
             <div className="sheet-toolbar">

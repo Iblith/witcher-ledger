@@ -146,3 +146,37 @@ describe('injuries and life events', () => {
     expect(twice[0].crits.map((w) => w.id)).toEqual([...witcher.crits.map((w) => w.id), 'w1'])
   })
 })
+
+import { creatorIssues, decadeRows, finishDraft, newDraft, skillBudget } from '../model/creator'
+
+describe('character creator', () => {
+  it('flags missing name, profession and unspent stat points', () => {
+    const steps = creatorIssues(newDraft()).map((x) => x.step)
+    expect(steps).toEqual([0, 2, 3])
+  })
+
+  it('splits skill points into profession and pick-up pools', () => {
+    const d = newDraft()
+    d.character.stats.INT = 6
+    d.character.stats.REF = 7
+    d.character.skills = { swordsmanship: 5, awareness: 3 }
+    d.character.definingSkillValue = 4
+    d.professionSkills = ['swordsmanship']
+    expect(skillBudget(d)).toMatchObject({ professionSpent: 9, professionTotal: 44, pickupSpent: 3, pickupTotal: 13 })
+  })
+
+  it('makes one decade row per decade from age 10', () => {
+    expect(decadeRows('34').map((r) => r.when)).toEqual(['Age 10s', 'Age 20s', 'Age 30s'])
+  })
+
+  it('turns the lifepath into life events and fills the pools', () => {
+    const d = newDraft()
+    d.character.name = 'Test'
+    d.character.stats = { INT: 7, REF: 8, DEX: 8, BODY: 7, SPD: 7, EMP: 6, CRA: 8, WILL: 7, LUCK: 12 }
+    d.family.fate = 'At least some of your family is alive'
+    d.decades = [{ id: 'a', when: 'Age 10s', kind: 'Enemy', title: 'Made an enemy', details: '' }, { id: 'b', when: 'Age 20s', kind: 'Fortune', title: '', details: '' }]
+    const c = finishDraft(d)
+    expect(c.lifeEvents.map((e) => [e.kind, e.title])).toEqual([['Family', 'Family fate'], ['Enemy', 'Made an enemy']])
+    expect([c.hp.current, c.sta.current, c.luckCurrent]).toEqual([35, 35, 12])
+  })
+})
