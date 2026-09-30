@@ -16,6 +16,8 @@ import {
   type StatKey,
 } from '../rules/rules'
 import { activeInjuries, cap } from '../model/injuries'
+import { addToCharacter, ARMOR, COVER_NAMES, type ArmorCover, type CatalogEntry } from '../model/catalog'
+import { CatalogSearch } from './CatalogSearch'
 import { Injuries, LifeEvents } from './LifeAndInjuries'
 import { ConfirmButton, NumberField, NumberInput, Pool, TextArea, TextField } from './fields'
 
@@ -359,6 +361,27 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
 
       <section className="panel">
         <h2 className="panel-title">Armor</h2>
+        <div className="armor-pickers">
+          {(['head', 'torso', 'legs'] as ArmorCover[]).map((cover) => (
+            <label className="field" key={cover}>
+              <span className="field-label">{COVER_NAMES[cover]}</span>
+              <select
+                value={ARMOR.find((e) => e.covers === cover && c.armor[cover === 'head' ? 'head' : cover === 'torso' ? 'torso' : 'rLeg'].piece === e.name)?.name ?? ''}
+                onChange={(e) => {
+                  const entry = ARMOR.find((x) => x.name === e.target.value)
+                  if (entry) set(addToCharacter(c, entry))
+                }}
+              >
+                <option value="">Choose armor…</option>
+                {ARMOR.filter((e) => e.covers === cover).map((e) => (
+                  <option key={e.name} value={e.name}>
+                    {e.name} (SP {e.sp}{e.ev ? `, EV ${e.ev}` : ''})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -443,20 +466,17 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
             )
           })}
         </div>
-        <button
-          type="button"
-          className="btn"
-          onClick={() =>
+        <CatalogSearch
+          label="Add a weapon from the book"
+          kinds={['weapon']}
+          placeholder="e.g. Arming sword, Crossbow, Halberd"
+          onPick={(e: CatalogEntry) => set(addToCharacter(c, e))}
+          onCustom={(name) =>
             set({
-              weapons: [
-                ...c.weapons,
-                { id: uid(), name: 'New weapon', skillId: 'swordsmanship', accuracy: 0, damage: '1d6', reliability: 10, hands: 1, range: '', effect: '', notes: '' },
-              ],
+              weapons: [...c.weapons, { id: uid(), name, skillId: 'swordsmanship', accuracy: 0, damage: '1d6', reliability: 10, hands: 1, range: '', effect: '', notes: '' }],
             })
           }
-        >
-          Add weapon
-        </button>
+        />
       </section>
 
       <section className="panel">
@@ -544,9 +564,13 @@ function Gear({ c, set }: { c: Character; set: Setter }) {
             </tbody>
           </table>
         </div>
-        <button type="button" className="btn" onClick={() => set({ items: [...c.items, { id: uid(), name: '', qty: 1, weight: 0, notes: '' }] })}>
-          Add item
-        </button>
+        <CatalogSearch
+          label="Add an item from the book"
+          kinds={['gear', 'shield', 'weapon', 'armor']}
+          placeholder="e.g. Rope, Lantern, Trail rations"
+          onPick={(e: CatalogEntry) => set(addToCharacter(c, e))}
+          onCustom={(name) => set({ items: [...c.items, { id: uid(), name, qty: 1, weight: 0, notes: '' }] })}
+        />
       </section>
     </div>
   )

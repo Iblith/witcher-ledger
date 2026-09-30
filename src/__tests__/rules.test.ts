@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { rollCheck } from '../rules/dice'
 import { derive, PROFESSIONS, SKILL_BY_ID, type Stats } from '../rules/rules'
-import { PROFESSION_GEAR, professionSkillIds } from '../model/presets'
+import { homeLanguageSkill, PROFESSION_GEAR, professionSkillIds, STARTING_GEAR_NOTE } from '../model/presets'
+import { addToCharacter, CATALOG, findEntry, hasOnCharacter, removeFromCharacter, search } from '../model/catalog'
 import { checkBase, derived, toCombatant } from '../model/combat'
 import { BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
 import { newCharacter, sampleCharacters } from '../model/factory'
@@ -217,12 +218,60 @@ describe('creator presets', () => {
       for (const id of ids) expect(SKILL_BY_ID[id], `${p.name}: ${id}`).toBeDefined()
     }
   })
-  it('uses the homeland language for "Language"', () => {
-    expect(professionSkillIds('Bard', 'Mahakam')).toContain('language-dwarven')
-    expect(professionSkillIds('Bard', 'Vicovaro')).toContain('language-elder-speech')
-    expect(professionSkillIds('Bard', '')).toContain('language-common-speech')
+  it('gives the home language free and a different one as a profession skill (errata p.49)', () => {
+    expect(homeLanguageSkill('Mahakam')).toBe('language-dwarven')
+    expect(homeLanguageSkill('Vicovaro')).toBe('language-elder-speech')
+    expect(homeLanguageSkill('')).toBe('language-common-speech')
+    for (const home of ['Mahakam', 'Vicovaro', 'Redania', '']) {
+      const second = professionSkillIds('Bard', home).find((id) => id.startsWith('language-'))
+      expect(second, home).toBeDefined()
+      expect(second, home).not.toBe(homeLanguageSkill(home))
+    }
   })
-  it('has gear to pick for every profession', () => {
-    for (const p of PROFESSIONS) expect(PROFESSION_GEAR[p.name].options.length, p.name).toBeGreaterThanOrEqual(PROFESSION_GEAR[p.name].pick)
+  it('has gear to pick for every profession, all of it in the catalog', () => {
+    for (const p of PROFESSIONS) {
+      const gear = PROFESSION_GEAR[p.name]
+      expect(gear.options.length, p.name).toBeGreaterThanOrEqual(gear.pick)
+      for (const name of gear.options) expect(findEntry(name), `${p.name}: ${name}`).toBeDefined()
+    }
+  })
+})
+
+describe('item catalog', () => {
+  it('has no duplicate names and every weapon uses a real skill', () => {
+    const names = CATALOG.map((e) => e.name.toLowerCase())
+    expect(new Set(names).size).toBe(names.length)
+    for (const e of CATALOG) if (e.kind === 'weapon') expect(SKILL_BY_ID[e.skillId], e.name).toBeDefined()
+  })
+  it('finds entries by prefix first', () => {
+    expect(search('cross', ['weapon'])[0].name).toBe('Crossbow')
+    expect(search('rope', ['gear'])[0].name).toBe('Rope (20 m)')
+  })
+  it('puts weapons, armor and gear where they belong', () => {
+    let c = newCharacter()
+    c = { ...c, ...addToCharacter(c, findEntry('Arming Sword')!) }
+    expect(c.weapons[0]).toMatchObject({ name: 'Arming Sword', skillId: 'swordsmanship' })
+    c = { ...c, ...addToCharacter(c, findEntry('Brigandine')!) }
+    expect(c.armor.torso).toMatchObject({ piece: 'Brigandine', sp: 12, maxSp: 12 })
+    expect(c.armor.rArm.piece, 'torso armor covers the arms (errata)').toBe('Brigandine')
+    expect(c.armor.head.piece).toBe('')
+    c = { ...c, ...addToCharacter(c, findEntry('Rope (20 m)')!) }
+    expect(c.items[0]).toMatchObject({ name: 'Rope (20 m)', weight: 2 })
+  })
+  it('takes starting gear back off again', () => {
+    let c = newCharacter()
+    for (const n of ['Witcher Steel Sword', 'Brigandine', 'Bedroll']) {
+      const e = findEntry(n)!
+      c = { ...c, ...addToCharacter(c, e, STARTING_GEAR_NOTE) }
+      expect(hasOnCharacter(c, e, STARTING_GEAR_NOTE), n).toBe(true)
+    }
+    for (const n of ['Witcher Steel Sword', 'Brigandine', 'Bedroll']) {
+      const e = findEntry(n)!
+      c = { ...c, ...removeFromCharacter(c, e, STARTING_GEAR_NOTE) }
+      expect(hasOnCharacter(c, e, STARTING_GEAR_NOTE), n).toBe(false)
+    }
+    expect(c.weapons).toHaveLength(0)
+    expect(c.items).toHaveLength(0)
+    expect(c.armor.torso.piece).toBe('')
   })
 })

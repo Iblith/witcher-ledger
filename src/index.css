@@ -423,8 +423,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .combat-log { margin: 0; padding-left: 1.2rem; max-height: 14rem; overflow-y: auto; font-size: 0.9rem; color: var(--muted); }
 .combat-log li:first-child { color: var(--fg); }
 .dialog-wide { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
-.pick-list .check { display: flex; flex-wrap: wrap; }
-.pick-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.pick-list .check { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 8px; }
+.pick-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; align-items: start; }
 .rule { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
 
 
@@ -509,7 +509,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .step-title { font-size: 1.5rem; }
 .step-intro { max-width: 65ch; margin-top: 4px; }
 .creator-foot {
-  position: sticky; bottom: 72px; display: flex; gap: 8px; align-items: center;
+  position: sticky; bottom: 72px; z-index: 5; display: flex; gap: 8px; align-items: center;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
 }
 /* keep focused fields and scrolled-to rows clear of the sticky creator footer */
@@ -586,3 +586,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Item catalog search */
+.catalog-search { position: relative; }
+.catalog-results {
+  list-style: none; margin: 4px 0 0; padding: 4px; position: absolute; z-index: 40; left: 0; right: 0;
+  max-height: 18rem; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+.catalog-result { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: inherit; }
+.catalog-result:hover, .catalog-result:focus-visible { background: var(--gold-soft); }
+.catalog-name { display: block; }
+.catalog-desc { display: block; color: var(--muted); font-size: 0.85rem; }
+.catalog-empty { padding: 6px 8px; }
+.catalog-close { margin: 4px; }
+.armor-pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.skill-free { display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-num); color: var(--muted); }

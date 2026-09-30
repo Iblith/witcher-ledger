@@ -1,5 +1,7 @@
 import { derive, SKILL_CAP_AT_CREATION, STAT_KEYS, type Stats } from '../rules/rules'
 import { newCharacter, uid } from './factory'
+import { findEntry, removeFromCharacter } from './catalog'
+import { HOME_LANGUAGE_VALUE, homeLanguageSkill, PROFESSION_GEAR, STARTING_GEAR_NOTE } from './presets'
 import type { Character, CharacterKind, Item, LifeEvent, LifeEventKind } from './types'
 
 // Stat point pools by campaign power level. The GM decides which one the table uses.
@@ -79,9 +81,12 @@ export function statPointsSpent(stats: Stats): number {
 export function skillBudget(d: CreatorDraft) {
   const c = d.character
   const prof = new Set(d.professionSkills)
+  const home = homeLanguageSkill(c.homeland)
   let professionSpent = c.definingSkillValue
   let pickupSpent = 0
-  for (const [id, v] of Object.entries(c.skills)) {
+  for (const [id, raw] of Object.entries(c.skills)) {
+    // The home language's first +8 is free.
+    const v = id === home ? Math.max(0, raw - HOME_LANGUAGE_VALUE) : raw
     if (prof.has(id)) professionSpent += v
     else pickupSpent += v
   }
@@ -135,6 +140,8 @@ export function finishDraft(d: CreatorDraft): Character {
   c.hp = { current: dv.hp, maxOverride: null }
   c.sta = { current: dv.sta, maxOverride: null }
   c.luckCurrent = c.stats.LUCK
+  const home = homeLanguageSkill(c.homeland)
+  c.skills = { ...c.skills, [home]: Math.max(c.skills[home] ?? 0, HOME_LANGUAGE_VALUE) }
   c.skills = Object.fromEntries(Object.entries(c.skills).filter(([, v]) => v > 0))
   const family: LifeEvent[] = []
   for (const f of FAMILY_FIELDS) {
@@ -148,4 +155,14 @@ export function finishDraft(d: CreatorDraft): Character {
   c.items = c.items.filter((i: Item) => i.name.trim())
   c.createdAt = c.updatedAt = Date.now()
   return c
+}
+
+// Takes off everything the old profession's starting gear put on the sheet.
+export function clearStartingGear(c: Character): Character {
+  let next = c
+  for (const name of PROFESSION_GEAR[c.profession]?.options ?? []) {
+    const e = findEntry(name)
+    if (e) next = { ...next, ...removeFromCharacter(next, e, STARTING_GEAR_NOTE) }
+  }
+  return next
 }

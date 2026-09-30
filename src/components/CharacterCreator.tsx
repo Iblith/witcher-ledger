@@ -6,6 +6,7 @@ import {
   decadeRows,
   FAMILY_FIELDS,
   finishDraft,
+  clearStartingGear,
   newDraft,
   PROFESSION_SKILL_POINTS,
   skillBudget,
@@ -19,16 +20,20 @@ import {
 import { applyProfession, uid } from '../model/factory'
 import {
   DEFAULT_HOMELAND,
+  HOME_LANGUAGE_VALUE,
   HOMELANDS,
   homelandLanguage,
+  homeLanguageSkill,
   LANGUAGE_NAMES,
-  LANGUAGE_SKILLS,
   perksText,
   PROFESSION_GEAR,
   professionSkillIds,
   STARTING_GEAR_NOTE,
+  secondLanguageSkill,
   WITCHER_SCHOOLS,
 } from '../model/presets'
+import { addToCharacter, describe, findEntry, hasOnCharacter, removeFromCharacter, type CatalogEntry } from '../model/catalog'
+import { CatalogSearch } from './CatalogSearch'
 import type { Character, LifeEventKind } from '../model/types'
 import { rollD10 } from '../rules/dice'
 import { derive, PROFESSIONS, SKILLS, STAT_KEYS, STAT_NAMES, type StatKey } from '../rules/rules'
@@ -263,12 +268,20 @@ function Race({ d, setD }: Omit<StepProps, 'setC'>) {
     const homeland = wasDefault ? (DEFAULT_HOMELAND[race] ?? '') : c.homeland
     setHomeland({ ...c, race, perks, school: race === 'Witcher' ? c.school : '' }, homeland)
   }
-  // The profession's "Language" skill follows the homeland, so move its star when the homeland changes.
+  // The home language comes free at +8, and the profession's second language depends on it,
+  // so both move when the homeland changes.
   const setHomeland = (next: Character, homeland: string) => {
-    const from = LANGUAGE_SKILLS[homelandLanguage(c.homeland) ?? 'common']
-    const to = LANGUAGE_SKILLS[homelandLanguage(homeland) ?? 'common']
+    const from = secondLanguageSkill(c.homeland)
+    const to = secondLanguageSkill(homeland)
     const professionSkills = d.professionSkills.map((id) => (id === from ? to : id))
-    setD({ ...d, professionSkills: [...new Set(professionSkills)], character: { ...next, homeland } })
+    const skills = { ...next.skills }
+    const oldHome = homeLanguageSkill(c.homeland)
+    if (skills[oldHome] === HOME_LANGUAGE_VALUE) delete skills[oldHome]
+    if (homeland) {
+      const home = homeLanguageSkill(homeland)
+      skills[home] = Math.max(skills[home] ?? 0, HOME_LANGUAGE_VALUE)
+    }
+    setD({ ...d, professionSkills: [...new Set(professionSkills)], character: { ...next, skills, homeland } })
   }
   return (
     <Step title="Choose your race" intro="Your race sets your perks, which are filled in for you. Edit them if your table plays them differently.">
@@ -287,7 +300,7 @@ function Race({ d, setD }: Omit<StepProps, 'setC'>) {
             <PickOrType label="School" value={c.school} onChange={(v) => setD({ ...d, character: { ...c, school: v } })} groups={[{ options: WITCHER_SCHOOLS }]} placeholder="School name" />
           )}
         </div>
-        {lang && <p className="hint">Native language: {LANGUAGE_NAMES[lang]}.</p>}
+        {lang && <p className="hint">Native language: {LANGUAGE_NAMES[lang]}, which you start with at +{HOME_LANGUAGE_VALUE} for free.</p>}
         <TextArea label="Racial perks" rows={4} value={c.perks} onChange={(v) => setD({ ...d, character: { ...c, perks: v } })} />
       </div>
     </Step>
@@ -306,14 +319,12 @@ function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
             className={'choice' + (c.profession === p.name ? ' choice-on' : '')}
             aria-pressed={c.profession === p.name}
             onClick={() => {
-              const next = applyProfession(c, p.name)
+              const next = applyProfession(p.name !== c.profession ? clearStartingGear(c) : c, p.name)
               next.crowns = STARTING_CROWNS[p.name] ?? next.crowns
               if (p.name === 'Witcher' && c.race !== 'Witcher') {
                 next.race = 'Witcher'
                 if (!c.perks.trim() || c.perks === perksText(c.race)) next.perks = perksText('Witcher')
               }
-              // A new profession brings its own skill list and gear, so the old picks go.
-              if (p.name !== c.profession) next.items = c.items.filter((i) => i.notes !== STARTING_GEAR_NOTE)
               setD({ ...d, character: next, professionSkills: professionSkillIds(p.name, c.homeland) })
             }}
           >
@@ -416,6 +427,7 @@ function Skills({ d, setD, setC }: StepProps) {
   const c = d.character
   const b = skillBudget(d)
   const prof = new Set(d.professionSkills)
+  const home = homeLanguageSkill(c.homeland)
   const [onlyProf, setOnlyProf] = useState(false)
   const toggleProf = (id: string) =>
     setD({ ...d, professionSkills: prof.has(id) ? d.professionSkills.filter((x) => x !== id) : [...d.professionSkills, id] })
@@ -469,7 +481,13 @@ function Skills({ d, setD, setC }: StepProps) {
                       ★
                     </button>
                     <span className="skill-name">{s.name}</span>
-                    <NumberInput ariaLabel={`${s.name} points`} value={c.skills[s.id] ?? 0} min={0} max={b.cap} onChange={(v) => setSkill(s.id, v)} className="skill-input" />
+                    {s.id === home && c.homeland ? (
+                      <span className="skill-input skill-free" title="Your home language starts at +8 for free">
+                        {c.skills[s.id] ?? HOME_LANGUAGE_VALUE}
+                      </span>
+                    ) : (
+                      <NumberInput ariaLabel={`${s.name} points`} value={c.skills[s.id] ?? 0} min={0} max={b.cap} onChange={(v) => setSkill(s.id, v)} className="skill-input" />
+                    )}
                     <span className="skill-total" title="Stat + skill">
                       {c.stats[stat] + (c.skills[s.id] ?? 0)}
                     </span>
@@ -558,9 +576,12 @@ function Lifepath({ d, setD }: Omit<StepProps, 'setC'>) {
 
 function Gear({ d, setC }: Omit<StepProps, 'setD'>) {
   const c = d.character
-  const [name, setName] = useState('')
+  const bought = [
+    ...c.weapons.filter((x) => x.notes !== STARTING_GEAR_NOTE).map((x) => ({ key: 'w' + x.id, name: x.name, remove: () => setC({ weapons: c.weapons.filter((y) => y.id !== x.id) }) })),
+    ...c.items.filter((x) => x.notes !== STARTING_GEAR_NOTE).map((x) => ({ key: 'i' + x.id, name: x.qty > 1 ? `${x.name} ×${x.qty}` : x.name, remove: () => setC({ items: c.items.filter((y) => y.id !== x.id) }) })),
+  ]
   return (
-    <Step title="Gear and coin" intro="Pick your profession's starting gear, then add anything you buy with your crowns. Weapon and armor stats go on the Combat tab once the sheet is made.">
+    <Step title="Gear and coin" intro="Pick your profession's starting gear, then add anything you buy with your crowns. Weapons and armor land on the Combat tab with their stats filled in.">
       <StartingGear d={d} setC={setC} />
       <div className="panel row-fields">
         <label className="field">
@@ -569,34 +590,28 @@ function Gear({ d, setC }: Omit<StepProps, 'setD'>) {
         </label>
         {c.profession && <p className="hint">The average for a {c.profession} is {STARTING_CROWNS[c.profession]} crowns.</p>}
       </div>
-      <form
-        className="panel"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!name.trim()) return
-          setC({ items: [...c.items, { id: uid(), name: name.trim(), qty: 1, weight: 0, notes: '' }] })
-          setName('')
-        }}
-      >
-        <div className="row-fields">
-          <TextField label="Add an item" value={name} onChange={setName} placeholder="e.g. Surgeon's kit" />
-          <button type="submit" className="btn">
-            Add
-          </button>
-        </div>
-        {c.items.length > 0 && (
+      <section className="panel stack">
+        <h3 className="panel-title">Anything else</h3>
+        <CatalogSearch
+          label="Add a weapon, armor or item"
+          kinds={['weapon', 'armor', 'shield', 'gear']}
+          placeholder="e.g. Crossbow, Brigandine, Rope"
+          onPick={(e: CatalogEntry) => setC(addToCharacter(c, e))}
+          onCustom={(name) => setC({ items: [...c.items, { id: uid(), name, qty: 1, weight: 0, notes: '' }] })}
+        />
+        {bought.length > 0 && (
           <ul className="history-list">
-            {c.items.map((i) => (
-              <li key={i.id}>
+            {bought.map((i) => (
+              <li key={i.key}>
                 <span className="history-text">{i.name}</span>
-                <button type="button" className="icon-btn" aria-label={`Remove ${i.name}`} onClick={() => setC({ items: c.items.filter((x) => x.id !== i.id) })}>
+                <button type="button" className="icon-btn" aria-label={`Remove ${i.name}`} onClick={i.remove}>
                   ×
                 </button>
               </li>
             ))}
           </ul>
         )}
-      </form>
+      </section>
     </Step>
   )
 }
@@ -605,26 +620,26 @@ function StartingGear({ d, setC }: Omit<StepProps, 'setD'>) {
   const c = d.character
   const gear = PROFESSION_GEAR[c.profession]
   if (!gear) return <p className="hint">Choose a profession to see its starting gear.</p>
-  const picked = new Set(c.items.filter((i) => i.notes === STARTING_GEAR_NOTE).map((i) => i.name))
-  const toggle = (name: string, qty = 1) => {
-    if (picked.has(name)) setC({ items: c.items.filter((i) => !(i.notes === STARTING_GEAR_NOTE && i.name === name)) })
-    else setC({ items: [...c.items, { id: uid(), name, qty, weight: 0, notes: STARTING_GEAR_NOTE }] })
-  }
+  const entries = gear.options.map((n) => findEntry(n)).filter((e): e is CatalogEntry => !!e)
+  const picked = entries.filter((e) => hasOnCharacter(c, e, STARTING_GEAR_NOTE))
+  const toggle = (e: CatalogEntry, on: boolean) => setC(on ? removeFromCharacter(c, e, STARTING_GEAR_NOTE) : addToCharacter(c, e, STARTING_GEAR_NOTE))
   return (
     <section className="panel">
       <div className="gear-head">
         <h3 className="panel-title">{c.profession} starting gear</h3>
-        <Budget label="Picks left" left={gear.pick - picked.size} total={gear.pick} />
+        <Budget label="Picks left" left={gear.pick - picked.length} total={gear.pick} />
       </div>
       <ul className="pick-list">
-        {gear.options.map((o) => {
-          const on = picked.has(o.name)
+        {entries.map((e) => {
+          const on = picked.includes(e)
           return (
-            <li key={o.name}>
+            <li key={e.name}>
               <label className="check">
-                <input type="checkbox" checked={on} disabled={!on && picked.size >= gear.pick} onChange={() => toggle(o.name, o.qty)} />
-                {o.name}
-                {o.qty && o.qty > 1 ? ` ×${o.qty}` : ''}
+                <input type="checkbox" checked={on} disabled={!on && picked.length >= gear.pick} onChange={() => toggle(e, on)} />
+                <span>
+                  {e.name}
+                  <span className="catalog-desc">{describe(e)}</span>
+                </span>
               </label>
             </li>
           )

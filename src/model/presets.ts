@@ -85,8 +85,8 @@ export function perksText(race: string): string {
   return (RACE_PERKS[race] ?? []).map((p) => `${p.name}: ${p.text}`).join('\n')
 }
 
-// The ten skills each profession spends its 44 points on. "Language" means the
-// character's homeland language and is swapped in when the profession is picked.
+// The ten skills each profession spends its 44 points on. "Language" is a second
+// language beside the home one, swapped in when the profession is picked.
 export const PROFESSION_SKILLS: Record<string, string[]> = {
   Bard: ['Charisma', 'Deceit', 'Fine Arts', 'Human Perception', 'Language', 'Performance', 'Persuasion', 'Seduction', 'Social Etiquette', 'Streetwise'],
   Craftsman: ['Alchemy', 'Awareness', 'Business', 'Crafting', 'Education', 'Endurance', 'Fine Arts', 'Physique', 'Streetwise', 'Trap Crafting'],
@@ -99,60 +99,39 @@ export const PROFESSION_SKILLS: Record<string, string[]> = {
   Witcher: ['Alchemy', 'Athletics', 'Awareness', 'Deduction', 'Dodge/Escape', 'Riding', 'Spell Casting', 'Stealth', 'Swordsmanship', 'Wilderness Survival'],
 }
 
+// v4 errata p.49: characters start fluent in their homeland language at +8, for free.
+export const HOME_LANGUAGE_VALUE = 8
+
+export function homeLanguageSkill(homeland: string): string {
+  return LANGUAGE_SKILLS[homelandLanguage(homeland) ?? 'common']
+}
+
+// The home language is already +8, so a profession's "Language" skill means a second one.
+export function secondLanguageSkill(homeland: string): string {
+  return homelandLanguage(homeland) === 'common' || !homelandLanguage(homeland) ? LANGUAGE_SKILLS.elder : LANGUAGE_SKILLS.common
+}
+
 export function professionSkillIds(profession: string, homeland: string): string[] {
-  const lang = LANGUAGE_SKILLS[homelandLanguage(homeland) ?? 'common']
+  const lang = secondLanguageSkill(homeland)
   return (PROFESSION_SKILLS[profession] ?? []).map((n) => (n === 'Language' ? lang : slug(n)))
 }
 
-export interface GearOption {
-  name: string
-  qty?: number
-  weight?: number
-  fromErrata?: boolean
-}
-
+// Each profession picks a number of these for free. Names match entries in the item catalog (catalog.ts).
 export interface ProfessionGear {
   pick: number
-  options: GearOption[]
+  options: string[]
 }
 
 export const PROFESSION_GEAR: Record<string, ProfessionGear> = {
-  Bard: {
-    pick: 5,
-    options: [{ name: 'Lute' }, { name: 'Dagger' }, { name: 'Journal' }, { name: 'Writing kit' }, { name: 'Perfume' }, { name: 'Makeup kit' }, { name: 'Hand mirror' }, { name: 'Fine clothes' }, { name: 'Hooded cloak' }, { name: 'Flask of spirits' }],
-  },
-  Craftsman: {
-    pick: 5,
-    options: [{ name: 'Crafting tools', fromErrata: true }, { name: "Tinker's forge" }, { name: 'Alchemy set' }, { name: 'Hand axe' }, { name: 'Dagger' }, { name: 'Sharpening stone' }, { name: 'Diagrams', qty: 3 }, { name: 'Small chest' }, { name: 'Hooded cloak' }, { name: 'Candles', qty: 5 }],
-  },
-  Criminal: {
-    pick: 5,
-    options: [{ name: "Thieves' tools" }, { name: 'Dagger' }, { name: 'Stiletto' }, { name: 'Hand crossbow' }, { name: 'Disguise kit' }, { name: 'Forgery kit' }, { name: 'Garrote' }, { name: 'Grappling hook' }, { name: 'Hooded cloak' }, { name: 'Dark clothes' }],
-  },
-  Doctor: {
-    pick: 5,
-    options: [{ name: "Surgeon's kit", fromErrata: true }, { name: 'Alchemy set' }, { name: 'Dagger' }, { name: 'Sterilizing fluid', qty: 5 }, { name: 'Numbing herbs', qty: 5 }, { name: 'Bandages', qty: 10 }, { name: 'Journal' }, { name: 'Lantern' }, { name: 'Hourglass' }, { name: 'Hooded cloak' }],
-  },
-  Mage: {
-    pick: 5,
-    options: [{ name: 'Staff' }, { name: 'Dagger' }, { name: 'Alchemy set' }, { name: 'Ritual components' }, { name: 'Writing kit' }, { name: 'Journal' }, { name: 'Hand mirror' }, { name: 'Perfume' }, { name: 'Fine clothes' }, { name: 'Makeup kit' }],
-  },
-  'Man-At-Arms': {
-    pick: 5,
-    options: [{ name: 'Arming sword' }, { name: 'Mace' }, { name: 'Spear' }, { name: 'Hand axe' }, { name: 'Crossbow and bolts' }, { name: 'Kite shield' }, { name: 'Gambeson' }, { name: 'Brigandine' }, { name: 'Dagger' }, { name: 'Bedroll' }],
-  },
-  Merchant: {
-    pick: 5,
-    options: [{ name: 'Writing kit' }, { name: 'Ledger' }, { name: 'Dagger' }, { name: 'Hand crossbow' }, { name: 'Fine clothes' }, { name: 'Lock box' }, { name: 'Scales' }, { name: 'Pack mule' }, { name: 'Bottle of wine', qty: 2 }, { name: 'Hooded cloak' }],
-  },
-  Priest: {
-    pick: 5,
-    options: [{ name: 'Holy symbol' }, { name: 'Staff' }, { name: 'Dagger' }, { name: 'Ritual components' }, { name: 'Journal' }, { name: 'Candles', qty: 5 }, { name: 'Incense' }, { name: 'Bandages', qty: 10 }, { name: 'Herbal remedies', qty: 3 }, { name: 'Hooded cloak' }],
-  },
-  Witcher: {
-    pick: 5,
-    options: [{ name: 'Steel sword' }, { name: 'Silver sword' }, { name: 'Witcher medallion' }, { name: 'Alchemy set' }, { name: 'Throwing knives', qty: 5 }, { name: 'Hand crossbow' }, { name: 'Brigandine' }, { name: 'Armored trousers' }, { name: 'Horse' }, { name: 'Bedroll' }],
-  },
+  Bard: { pick: 5, options: ['Lute', 'Dagger', 'Journal', 'Writing Kit', 'Perfume', 'Makeup Kit', 'Hand mirror', 'Fine clothes', 'Hooded cloak', 'Flask of spirits'] },
+  Craftsman: { pick: 5, options: ['Crafting Tools', "Tinker's Forge", 'Alchemy Set', 'Hand Axe', 'Dagger', 'Sharpening stone', 'Diagrams', 'Small chest', 'Hooded cloak', 'Candles'] },
+  Criminal: { pick: 5, options: ["Thieves' Tools", 'Dagger', 'Stiletto', 'Hand Crossbow', 'Disguise Kit', 'Forgery Kit', 'Garrote', 'Grappling hook', 'Hooded cloak', 'Dark clothes'] },
+  Doctor: { pick: 5, options: ["Surgeon's Kit", 'Alchemy Set', 'Dagger', 'Sterilizing fluid', 'Numbing herbs', 'Bandages', 'Journal', 'Lantern', 'Hourglass', 'Hooded cloak'] },
+  Mage: { pick: 5, options: ['Staff', 'Dagger', 'Alchemy Set', 'Ritual components', 'Writing Kit', 'Journal', 'Hand mirror', 'Perfume', 'Fine clothes', 'Makeup Kit'] },
+  'Man-At-Arms': { pick: 5, options: ['Arming Sword', 'Mace', 'Spear', 'Hand Axe', 'Crossbow', 'Kite Shield', 'Gambeson', 'Brigandine', 'Dagger', 'Bedroll'] },
+  Merchant: { pick: 5, options: ['Writing Kit', "Merchant's Tools", 'Dagger', 'Hand Crossbow', 'Fine clothes', 'Lock box', 'Scales', 'Mule', 'Bottle of wine', 'Hooded cloak'] },
+  Priest: { pick: 5, options: ['Holy symbol', 'Staff', 'Dagger', 'Ritual components', 'Journal', 'Candles', 'Herbal remedies', 'Bandages', 'Hooded cloak', 'Traveling clothes'] },
+  Witcher: { pick: 5, options: ['Witcher Steel Sword', 'Witcher Silver Sword', 'Witcher medallion', 'Alchemy Set', 'Throwing Knife', 'Hand Crossbow', 'Brigandine', 'Armored Trousers', 'Horse', 'Bedroll'] },
 }
 
 // Starting-gear items are tagged in their notes so the creator can find and untick them.
