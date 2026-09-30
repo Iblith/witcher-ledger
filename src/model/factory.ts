@@ -40,6 +40,7 @@ export function newCharacter(kind: CharacterKind = 'pc', name = 'New character')
     armor: emptyArmor(),
     weapons: [],
     crits: [],
+    lifeEvents: [],
     conditions: '',
     items: [],
     crowns: 0,
@@ -108,6 +109,14 @@ export function sampleCharacters(): Character[] {
   witcher.spells = [
     { id: uid(), name: 'Igni', kind: 'Sign', staCost: '1-5', range: '4m', duration: 'Immediate', defense: 'Dodge/Block', effect: '1d6 per STA spent, 50% ignite' },
     { id: uid(), name: 'Quen', kind: 'Sign', staCost: '1-5', range: 'Self', duration: 'Active', defense: 'None', effect: 'Shield of 5 SP per STA spent' },
+  ]
+  witcher.lifeEvents = [
+    { id: uid(), when: 'Age 7', kind: 'Family', title: 'Taken by the witchers', details: 'Claimed under the Law of Surprise and brought to Kaer Morhen.' },
+    { id: uid(), when: 'Age 30s', kind: 'Enemy', title: 'Crossed a Nilfgaardian officer', details: 'Refused a contract; the officer swore revenge.' },
+    { id: uid(), when: 'Session 1', kind: 'Campaign', title: 'Took the drowner contract at the ford', details: '' },
+  ]
+  witcher.crits = [
+    { id: uid(), location: 'torso', severity: 'complex', description: 'Cracked ribs', effect: 'Check the critical wound table for its penalty', when: 'Session 1', treated: true, healed: false },
   ]
   witcher.items = [
     { id: uid(), name: 'Swallow potion', qty: 2, weight: 0.1, notes: '' },

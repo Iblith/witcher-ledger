@@ -2,7 +2,7 @@ import { rollCheck, rollD10, type D10 } from '../rules/dice'
 import { HIT_LOCATIONS, type HitLocation } from '../rules/rules'
 import { toCombatant, type Combatant } from './combat'
 import { uid } from './factory'
-import type { Character } from './types'
+import type { Character, CriticalWound } from './types'
 
 export type EntryKind = 'pc' | 'npc' | 'monster'
 
@@ -23,6 +23,8 @@ export interface EncounterEntry {
   defenses: Combatant['defenses']
   attacks: Combatant['attacks']
   conditions: string[]
+  // Critical wounds taken in this fight. Older saved fights may not have the field.
+  injuries?: CriticalWound[]
   notes: string
   defeated: boolean
 }
@@ -96,6 +98,7 @@ export function entryFromCharacter(c: Character): EncounterEntry {
     defenses: { ...cb.defenses },
     attacks: cb.attacks.map((a) => ({ ...a })),
     conditions: [],
+    injuries: [],
     notes: '',
     defeated: false,
   }
@@ -133,6 +136,7 @@ export function monsterEntries(m: MonsterInput): EncounterEntry[] {
     defenses: { dodge: m.dodge, reposition: m.dodge },
     attacks: m.attack || m.damage ? [{ name: 'Attack', base: m.attack, damage: m.damage }] : [],
     conditions: [],
+    injuries: [],
     notes: m.notes,
     defeated: false,
   }))
@@ -230,7 +234,7 @@ export function entryState(x: EncounterEntry): EntryState {
   return 'ok'
 }
 
-// Copies a fight's HP, Stamina and armor SP back onto the linked character sheets.
+// Copies a fight's HP, Stamina, armor SP and new injuries back onto the linked character sheets.
 export function writeBack(e: Encounter, characters: Character[]): Character[] {
   const byChar = new Map(e.entries.filter((x) => x.characterId).map((x) => [x.characterId!, x]))
   return characters.map((c) => {
@@ -238,7 +242,10 @@ export function writeBack(e: Encounter, characters: Character[]): Character[] {
     if (!x) return c
     const armor = { ...c.armor }
     for (const l of HIT_LOCATIONS) armor[l] = { ...armor[l], sp: Math.min(x.sp[l], armor[l].maxSp || x.sp[l]) }
-    return { ...c, hp: { ...c.hp, current: x.hp.current }, sta: { ...c.sta, current: x.sta.current }, armor, updatedAt: Date.now() }
+    // Injuries are matched by id, so saving the same fight twice doesn't duplicate them.
+    const known = new Set(c.crits.map((w) => w.id))
+    const crits = [...c.crits, ...(x.injuries ?? []).filter((w) => !known.has(w.id))]
+    return { ...c, hp: { ...c.hp, current: x.hp.current }, sta: { ...c.sta, current: x.sta.current }, armor, crits, updatedAt: Date.now() }
   })
 }
 

@@ -128,3 +128,21 @@ describe('encounters', () => {
     expect(bandit.hp.current).toBe(25)
   })
 })
+
+describe('injuries and life events', () => {
+  it('fills life events on older sheets', () => {
+    const [c] = parseCharacters({ name: 'Old sheet' })
+    expect(c.lifeEvents).toEqual([])
+  })
+
+  it('writes fight injuries to the sheet once', () => {
+    const [witcher] = sampleCharacters()
+    const e = newEncounter('t')
+    const entry = entryFromCharacter(witcher)
+    entry.injuries = [{ id: 'w1', location: 'lArm', severity: 'complex', description: 'Fractured arm', treated: false }]
+    e.entries = [entry]
+    const once = writeBack(e, [witcher])
+    const twice = writeBack(e, once)
+    expect(twice[0].crits.map((w) => w.id)).toEqual([...witcher.crits.map((w) => w.id), 'w1'])
+  })
+})

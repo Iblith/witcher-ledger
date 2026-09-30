@@ -423,6 +423,63 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .pick-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
 .rule { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
 
+
+/* Injuries */
+.tab-badge {
+  display: inline-grid; place-items: center; min-width: 1.2rem; height: 1.2rem; margin-left: 6px; padding: 0 4px;
+  border-radius: 999px; background: var(--blood); color: var(--surface); font-family: var(--font-num); font-size: 0.72rem;
+}
+.injury-summary { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 24px; }
+.injury-summary .btn { margin-left: auto; }
+.summary-num { display: flex; flex-direction: column; }
+.summary-num strong { font-family: var(--font-num); font-size: 1.6rem; line-height: 1.1; }
+.summary-alert strong { color: var(--blood); }
+.injury { border-left: 4px solid var(--tone, var(--line)); }
+.injury-simple, .sev-simple { --tone: var(--steel); }
+.injury-complex, .sev-complex { --tone: var(--gold); }
+.injury-difficult, .sev-difficult { --tone: var(--blood); }
+.injury-deadly, .sev-deadly { --tone: var(--blood); }
+.injury-deadly { background: var(--blood-soft); }
+.injury-head { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.injury-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.history-list li { display: flex; gap: 10px; align-items: baseline; }
+.history-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.history-text > .hint { display: inline; }
+.injury-effect { font-size: 0.85rem; color: var(--muted); }
+.sev-pill {
+  flex: none; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+  border: 1px solid var(--tone); color: var(--fg); border-radius: 3px; padding: 0 5px;
+}
+.sev-deadly { background: var(--blood); color: var(--surface); }
+.crit-fields { grid-column: 1 / -1; display: grid; grid-template-columns: 10rem 1fr; gap: 10px; }
+.entry-injuries { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.entry-injuries li { display: flex; gap: 6px; align-items: center; font-size: 0.85rem; border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px 1px 6px; }
+
+/* Life events */
+.event-form { display: grid; grid-template-columns: 10rem 10rem 1fr; gap: 10px; }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.event {
+  position: relative; display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
+  --tone: var(--muted);
+}
+.event::before {
+  content: ''; position: absolute; left: -22px; top: 16px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--bg); border: 3px solid var(--tone);
+}
+.event-family, .event-romance { --tone: var(--gold); }
+.event-fortune, .event-ally { --tone: var(--ok); }
+.event-misfortune, .event-enemy { --tone: var(--blood); }
+.event-campaign { --tone: var(--steel); }
+.event-when input { font-family: var(--font-num); font-size: 0.85rem; }
+.event-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.event-title-row { display: flex; gap: 8px; }
+.event-kind { width: auto; flex: none; color: var(--tone); font-weight: 600; }
+.event-title { font-weight: 700; flex: 1; }
+.event-actions { display: flex; align-items: center; gap: 4px; }
+.icon-btn:disabled { opacity: 0.3; cursor: default; background: transparent; }
+
 @media (max-width: 760px) {
   .app { grid-template-columns: minmax(0, 1fr); }
   .phone-roster .main { display: none; }
@@ -435,6 +492,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   .crit { grid-template-columns: 1fr 1fr; }
   .crit input:not([type='checkbox']) { grid-column: 1 / -1; }
   .entry { grid-template-columns: 3.6rem minmax(0, 1fr); }
+  .event-form { grid-template-columns: 1fr 1fr; }
+  .event-form > :last-child { grid-column: 1 / -1; }
+  .event { grid-template-columns: minmax(0, 1fr); }
+  .event-title-row { flex-wrap: wrap; }
+  .event-title { flex-basis: 100%; }
+  .crit-fields { grid-template-columns: 1fr; }
   .entry-side { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; }
 }
 

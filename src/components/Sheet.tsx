@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { checkBase, derived, carriedWeight } from '../model/combat'
 import { applyProfession, uid } from '../model/factory'
-import type { Character, CritSeverity, Item, Spell, SpellKind, Weapon } from '../model/types'
+import type { Character, Item, Spell, SpellKind, Weapon } from '../model/types'
 import {
   HIT_LOCATIONS,
   HIT_LOCATION_NAMES,
@@ -16,13 +16,17 @@ import {
   type StatKey,
 } from '../rules/rules'
 import { IS_GM } from '../edition'
+import { activeInjuries, cap } from '../model/injuries'
+import { Injuries, LifeEvents } from './LifeAndInjuries'
 import { ConfirmButton, NumberField, NumberInput, Pool, TextArea, TextField } from './fields'
 
-type Tab = 'overview' | 'skills' | 'combat' | 'gear' | 'magic' | 'notes'
+type Tab = 'overview' | 'skills' | 'combat' | 'injuries' | 'life' | 'gear' | 'magic' | 'notes'
 const TABS: Array<[Tab, string]> = [
   ['overview', 'Overview'],
   ['skills', 'Skills'],
   ['combat', 'Combat'],
+  ['injuries', 'Injuries'],
+  ['life', 'Life events'],
   ['gear', 'Gear'],
   ['magic', 'Magic'],
   ['notes', 'Notes'],
@@ -51,13 +55,16 @@ export function Sheet({ character: c, onChange, onRoll }: SheetProps) {
             onClick={() => setTab(id)}
           >
             {label}
+            {id === 'injuries' && activeInjuries(c).length > 0 && <span className="tab-badge">{activeInjuries(c).length}</span>}
           </button>
         ))}
       </nav>
       <div className="tab-panel" role="tabpanel">
         {tab === 'overview' && <Overview c={c} set={set} onRoll={onRoll} />}
         {tab === 'skills' && <Skills c={c} set={set} onRoll={onRoll} />}
-        {tab === 'combat' && <Combat c={c} set={set} onRoll={onRoll} />}
+        {tab === 'combat' && <Combat c={c} set={set} onRoll={onRoll} onOpenInjuries={() => setTab('injuries')} />}
+        {tab === 'injuries' && <Injuries c={c} set={set} />}
+        {tab === 'life' && <LifeEvents c={c} set={set} />}
         {tab === 'gear' && <Gear c={c} set={set} />}
         {tab === 'magic' && <Magic c={c} set={set} onRoll={onRoll} />}
         {tab === 'notes' && <Notes c={c} set={set} />}
@@ -338,9 +345,7 @@ function SkillRow(props: {
   )
 }
 
-const SEVERITIES: CritSeverity[] = ['simple', 'complex', 'difficult', 'deadly']
-
-function Combat({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetProps['onRoll'] }) {
+function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter; onRoll: SheetProps['onRoll']; onOpenInjuries: () => void }) {
   const updWeapon = (id: string, patch: Partial<Weapon>) =>
     set({ weapons: c.weapons.map((w) => (w.id === id ? { ...w, ...patch } : w)) })
   const weaponSkills = SKILLS.filter((s) =>
@@ -466,46 +471,27 @@ function Combat({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
       </section>
 
       <section className="panel">
-        <h2 className="panel-title">Critical wounds</h2>
-        {c.crits.length === 0 && <p className="hint">No critical wounds.</p>}
-        <ul className="crit-list">
-          {c.crits.map((w) => {
-            const upd = (patch: Partial<typeof w>) => set({ crits: c.crits.map((x) => (x.id === w.id ? { ...x, ...patch } : x)) })
-            return (
-              <li key={w.id} className={`crit crit-${w.severity}${w.treated ? ' crit-treated' : ''}`}>
-                <select aria-label="Severity" value={w.severity} onChange={(e) => upd({ severity: e.target.value as CritSeverity })}>
-                  {SEVERITIES.map((s) => (
-                    <option key={s} value={s}>
-                      {s[0].toUpperCase() + s.slice(1)}
-                    </option>
-                  ))}
-                </select>
-                <select aria-label="Location" value={w.location} onChange={(e) => upd({ location: e.target.value as typeof w.location })}>
-                  {HIT_LOCATIONS.map((l) => (
-                    <option key={l} value={l}>
-                      {HIT_LOCATION_NAMES[l]}
-                    </option>
-                  ))}
-                </select>
-                <input aria-label="Wound" placeholder="e.g. Cracked ribs" value={w.description} onChange={(e) => upd({ description: e.target.value })} />
-                <label className="check">
-                  <input type="checkbox" checked={w.treated} onChange={(e) => upd({ treated: e.target.checked })} />
-                  Stabilized
-                </label>
-                <button type="button" className="icon-btn" aria-label="Healed, remove wound" onClick={() => set({ crits: c.crits.filter((x) => x.id !== w.id) })}>
-                  ×
-                </button>
+        <h2 className="panel-title">Injuries</h2>
+        {activeInjuries(c).length === 0 ? (
+          <p className="hint">No active injuries.</p>
+        ) : (
+          <ul className="history-list">
+            {activeInjuries(c).map((w) => (
+              <li key={w.id}>
+                <span className={'sev-pill sev-' + w.severity}>{cap(w.severity)}</span>
+                <span className="history-text">
+                  {w.description || 'Unnamed injury'} <span className="hint">· {HIT_LOCATION_NAMES[w.location]}{w.treated ? ' · stabilized' : ''}</span>
+                  {w.effect && <span className="injury-effect">{w.effect}</span>}
+                </span>
               </li>
-            )
-          })}
-        </ul>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => set({ crits: [...c.crits, { id: uid(), location: 'torso', severity: 'simple', description: '', treated: false }] })}
-        >
-          Add critical wound
-        </button>
+            ))}
+          </ul>
+        )}
+        <div>
+          <button type="button" className="btn" onClick={onOpenInjuries}>
+            Manage injuries
+          </button>
+        </div>
       </section>
 
       <section className="panel">

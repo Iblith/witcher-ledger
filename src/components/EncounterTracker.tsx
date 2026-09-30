@@ -16,6 +16,8 @@ import {
 import type { Character } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
+import { blankInjury, cap, SEVERITIES } from '../model/injuries'
+import type { CritSeverity } from '../model/types'
 
 const SP_SHORT: Record<HitLocation, string> = { head: 'H', torso: 'T', rArm: 'RA', lArm: 'LA', rLeg: 'RL', lLeg: 'LL' }
 const STATE_LABEL = { ok: '', wounded: 'Wounded', dying: 'Death state', defeated: 'Out' } as const
@@ -31,7 +33,9 @@ export interface TrackerProps {
 export function EncounterTracker({ encounter: e, characters, onChange, onRoll, onWriteBack }: TrackerProps) {
   const [adding, setAdding] = useState(false)
   const [damageFor, setDamageFor] = useState<string | null>(null)
-  const [wroteBack, setWroteBack] = useState(false)
+  // Remembers which version of the fight was saved, so a new hit shows the button again.
+  const [savedEntries, setSavedEntries] = useState<EncounterEntry[] | null>(null)
+  const wroteBack = savedEntries === e.entries
   const order = turnOrder(e)
   const linked = e.entries.filter((x) => x.characterId).length
 
@@ -104,10 +108,10 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
           <button
             type="button"
             className="btn"
-            title="Copy HP, Stamina and armor SP back to the character sheets"
+            title="Copy HP, Stamina, armor SP and new injuries back to the character sheets"
             onClick={() => {
               onWriteBack()
-              setWroteBack(true)
+              setSavedEntries(e.entries)
             }}
           >
             {wroteBack ? 'Saved to sheets' : `Save wounds to ${linked} sheet${linked > 1 ? 's' : ''}`}
@@ -244,6 +248,25 @@ function EntryRow(props: {
 
         {props.damageOpen && <DamageForm x={x} onApply={props.onDamage} />}
 
+        {(x.injuries ?? []).length > 0 && (
+          <ul className="entry-injuries">
+            {(x.injuries ?? []).map((w) => (
+              <li key={w.id}>
+                <span className={'sev-pill sev-' + w.severity}>{cap(w.severity)}</span>
+                {w.description || 'Critical wound'} · {HIT_LOCATION_NAMES[w.location]}
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Remove injury"
+                  onClick={() => props.onChange({ injuries: (x.injuries ?? []).filter((y) => y.id !== w.id) })}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="conditions">
           {CONDITIONS.map((c) => {
             const on = x.conditions.includes(c)
@@ -279,13 +302,25 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
   const [location, setLocation] = useState<HitLocation>('torso')
   const [ignoreArmor, setIgnoreArmor] = useState(false)
   const [resistant, setResistant] = useState(x.kind === 'monster')
-  const preview = applyDamage(x, { amount, location, ignoreArmor, resistant })
+  const [crit, setCrit] = useState(false)
+  const [severity, setSeverity] = useState<CritSeverity>('simple')
+  const [critText, setCritText] = useState('')
+  const base = applyDamage(x, { amount, location, ignoreArmor, resistant })
+  const injury = crit ? { ...blankInjury(location), severity, description: critText.trim() } : null
+  const preview = injury
+    ? {
+        ...base,
+        entry: { ...base.entry, injuries: [...(x.injuries ?? []), injury] },
+        summary: `${amount > 0 ? base.summary : x.name}; ${severity} critical to the ${HIT_LOCATION_NAMES[location].toLowerCase()}${injury.description ? ` (${injury.description})` : ''}`,
+      }
+    : base
+  const canApply = amount > 0 || crit
   return (
     <form
       className="damage-form"
       onSubmit={(ev) => {
         ev.preventDefault()
-        if (amount > 0) onApply(preview)
+        if (canApply) onApply(preview)
       }}
     >
       <NumberField label="Damage rolled" value={amount} min={0} onChange={setAmount} />
@@ -313,10 +348,32 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
           <input type="checkbox" checked={resistant} onChange={(ev) => setResistant(ev.target.checked)} />
           Resistant (half)
         </label>
+        <label className="check">
+          <input type="checkbox" checked={crit} onChange={(ev) => setCrit(ev.target.checked)} />
+          Critical wound
+        </label>
       </div>
+      {crit && (
+        <div className="crit-fields">
+          <label className="field">
+            <span className="field-label">Severity</span>
+            <select value={severity} onChange={(ev) => setSeverity(ev.target.value as CritSeverity)}>
+              {SEVERITIES.map((sv) => (
+                <option key={sv} value={sv}>
+                  {cap(sv)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <TextField label="Wound" value={critText} onChange={setCritText} placeholder="e.g. Fractured arm" />
+        </div>
+      )}
       <div className="damage-preview">
-        <span>{amount > 0 ? `${preview.hpLoss} HP${preview.ablated ? ', armor −1 SP' : ''}` : 'Enter the damage roll'}</span>
-        <button type="submit" className="btn btn-primary" disabled={amount <= 0}>
+        <span>
+          {amount > 0 ? `${preview.hpLoss} HP${preview.ablated ? ', armor −1 SP' : ''}` : crit ? 'Critical only' : 'Enter the damage roll'}
+          {crit && amount > 0 ? ' + critical' : ''}
+        </span>
+        <button type="submit" className="btn btn-primary" disabled={!canApply}>
           Apply
         </button>
       </div>

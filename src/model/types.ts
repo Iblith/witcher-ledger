@@ -38,7 +38,25 @@ export interface CriticalWound {
   location: HitLocation
   severity: CritSeverity
   description: string
+  // Stabilized by a doctor or first aid; the wound still needs time to heal.
   treated: boolean
+  // What the wound does in play (e.g. "-2 to REF"). Optional for sheets saved before injuries existed.
+  effect?: string
+  // When it happened, in the table's own terms ("Session 4", "Ambush at Oxenfurt").
+  when?: string
+  healed?: boolean
+}
+
+export const LIFE_EVENT_KINDS = ['Family', 'Fortune', 'Misfortune', 'Ally', 'Enemy', 'Romance', 'Campaign', 'Other'] as const
+export type LifeEventKind = (typeof LIFE_EVENT_KINDS)[number]
+
+// A lifepath roll or something that happened during play, kept in the order it happened.
+export interface LifeEvent {
+  id: string
+  when: string
+  kind: LifeEventKind
+  title: string
+  details: string
 }
 
 export interface Item {
@@ -87,6 +105,7 @@ export interface Character {
   armor: Record<HitLocation, ArmorSlot>
   weapons: Weapon[]
   crits: CriticalWound[]
+  lifeEvents: LifeEvent[]
   conditions: string
   items: Item[]
   crowns: number
