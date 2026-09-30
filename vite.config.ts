@@ -25,8 +25,10 @@ function manifest(env: Record<string, string>, edition: string): Plugin {
             theme_color: '#111518',
             icons: [
               { src: `icons/${edition}-192.png`, sizes: '192x192', type: 'image/png' },
+              { src: `icons/${edition}-512.png`, sizes: '512x512', type: 'image/png' },
               { src: `icons/${edition}.svg`, sizes: 'any', type: 'image/svg+xml' },
-              { src: `icons/${edition}.svg`, sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+              { src: `icons/${edition}-maskable-192.png`, sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+              { src: `icons/${edition}-maskable-512.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
             ],
           },
           null,
