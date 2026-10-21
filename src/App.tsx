@@ -4,6 +4,7 @@ import { EDITION_LABEL, IS_GM, STORAGE_PREFIX } from './edition'
 import gmMark from './assets/gm-mark.svg?inline'
 import playerMark from './assets/player-mark.svg?inline'
 import { CharacterCreator } from './components/CharacterCreator'
+import { CheatSheet, CheatTopics } from './components/CheatSheet'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
@@ -21,9 +22,9 @@ import { PROFESSIONS, RACES } from './rules/rules'
 
 const repo = new LocalStorageRepository()
 const encounterRepo = new LocalEncounterRepository()
-// GM sections: imported player sheets, the GM's own NPCs plus the bestiary, and fights.
-// The Player version only ever shows 'players' (its own characters).
-type Mode = 'players' | 'npcs' | 'encounters'
+// GM sections: imported player sheets, the GM's own NPCs plus the bestiary, fights, and the rules
+// cheat sheet. The Player version only ever shows 'players' (its own characters).
+type Mode = 'players' | 'npcs' | 'encounters' | 'rules'
 type NpcFilter = 'all' | 'mine' | 'bestiary'
 const SEEDED_KEY = `${STORAGE_PREFIX}:bestiary-seeded`
 const NPC_PACK_KEY = `${STORAGE_PREFIX}:npc-pack-1-seeded`
@@ -69,6 +70,7 @@ export default function App() {
   const [creating, setCreating] = useState(false)
   const [encounters, setEncounters] = useState<Encounter[]>(() => encounterRepo.load() ?? (IS_GM ? [sampleEncounter(characters)] : []))
   const [encounterId, setEncounterId] = useState<string | null>(() => encounters[0]?.id ?? null)
+  const [cheatJump, setCheatJump] = useState<{ id: string; at: number } | null>(null)
 
   useEffect(() => repo.save(characters), [characters])
   useEffect(() => {
@@ -144,9 +146,19 @@ export default function App() {
           <button type="button" role="tab" aria-selected={mode === 'encounters'} onClick={() => setMode('encounters')}>
             Encounters
           </button>
+          <button type="button" role="tab" aria-selected={mode === 'rules'} onClick={() => setMode('rules')}>
+            Cheat sheet
+          </button>
         </div>
         )}
-        {mode === 'encounters' ? (
+        {mode === 'rules' ? (
+          <CheatTopics
+            onPick={(t) => {
+              setCheatJump({ id: t.id, at: Date.now() })
+              setShowRosterOnPhone(false)
+            }}
+          />
+        ) : mode === 'encounters' ? (
           <EncounterRail
             encounters={encounters}
             selectedId={encounterId}
@@ -256,7 +268,16 @@ export default function App() {
       </aside>
 
       <main className="main">
-        {mode === 'encounters' ? (
+        {mode === 'rules' ? (
+          <>
+            <div className="sheet-toolbar phone-only-bar">
+              <button type="button" className="btn btn-quiet phone-only" onClick={() => setShowRosterOnPhone(true)}>
+                ← Topics
+              </button>
+            </div>
+            <CheatSheet jumpTo={cheatJump} />
+          </>
+        ) : mode === 'encounters' ? (
           encounter ? (
             <>
               <div className="sheet-toolbar">

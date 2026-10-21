@@ -693,3 +693,40 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .npc-result-on { background: var(--gold-soft); border-color: var(--gold); }
 .npc-result-name { font-weight: 600; }
 .npc-result-meta { color: var(--muted); font-size: 0.85rem; }
+
+/* GM cheat sheet */
+.cheat { max-width: 860px; display: flex; flex-direction: column; gap: 12px; }
+.cheat-head { display: flex; flex-direction: column; gap: 8px; }
+.cheat-topic { padding: 0; gap: 0; }
+.cheat-topic > summary {
+  cursor: pointer; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; list-style-position: outside;
+}
+.cheat-topic-title { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; }
+.cheat-entries { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.cheat-entry { border-bottom: 1px solid var(--line); }
+.cheat-entry:last-child { border-bottom: 0; }
+.cheat-entry > summary {
+  cursor: pointer; padding: 10px 14px; display: flex; gap: 10px; align-items: baseline; justify-content: space-between;
+}
+.cheat-entry[open] > summary { background: var(--gold-soft); }
+.cheat-entry-title { font-weight: 700; }
+.cheat-page { flex: none; font-family: var(--font-num); font-size: 0.78rem; color: var(--gold); white-space: nowrap; }
+.cheat-body { padding: 8px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.cheat-lines { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; }
+.cheat-table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+.cheat-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.82rem; }
+.cheat-table th, .cheat-table td { border-bottom: 1px solid var(--line); padding: 4px 8px 4px 0; vertical-align: top; }
+.cheat-table td:last-child { overflow-wrap: anywhere; }
+.cheat-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cheat-items li {
+  display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border-left: 3px solid var(--line); background: var(--sunk); border-radius: 4px;
+}
+.cheat-reading { margin: 0; padding: 6px 10px; border-left: 3px solid var(--blood); background: var(--blood-soft); border-radius: 4px; font-size: 0.92rem; }
+.cheat-errata { margin: 0; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+/* Four GM sections: two rows of two in the narrow desktop rail, one row on a phone. */
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; }
+.mode-switch button { min-width: 0; padding-inline: 2px; }
+@media (max-width: 760px) {
+  .mode-switch { grid-template-columns: repeat(4, auto); }
+  .mode-switch button { font-size: 0.92rem; }
+}
