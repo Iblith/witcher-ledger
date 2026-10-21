@@ -1,8 +1,8 @@
 // Core rules data for The Witcher TTRPG (R. Talsorian).
 //
-// Sources in the project (no core rulebook): the core v4 errata and A Witcher's Journal. What each
-// one settles is noted next to the data. Anything marked UNVERIFIED is from memory of the core book
-// and should be checked against it.
+// Source: the core rulebook (v1.35, third printing, which already carries the errata), cited by
+// page. The v4 errata and A Witcher's Journal fill in where noted. Anything still marked UNVERIFIED
+// is not settled by those books.
 
 export const STAT_KEYS = ['INT', 'REF', 'DEX', 'BODY', 'SPD', 'EMP', 'CRA', 'WILL', 'LUCK'] as const
 export type StatKey = (typeof STAT_KEYS)[number]
@@ -23,11 +23,15 @@ export interface SkillDef {
   id: string
   name: string
   stat: StatKey
+  // Difficult skills cost 2 points per level (core p. 49, marked "(2)" in the list).
+  difficult?: boolean
 }
 
-// The skill list and each skill's governing stat are UNVERIFIED (from memory of the core book).
+// The skill list and each skill's governing stat: core p. 49.
 const s = (stat: StatKey, names: string[]): SkillDef[] =>
-  names.map((name) => ({ id: slug(name), name, stat }))
+  names.map((name) => ({ id: slug(name), name, stat, ...(DIFFICULT.has(name) || name.startsWith('Language') ? { difficult: true } : {}) }))
+
+const DIFFICULT = new Set(['Monster Lore', 'Tactics', 'Alchemy', 'Crafting', 'Trap Crafting', 'Hex Weaving', 'Spell Casting', 'Resist Magic', 'Ritual Crafting'])
 
 export function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -92,20 +96,25 @@ export const RACES = ['Human', 'Elf', 'Dwarf', 'Witcher', 'Monster', 'Other'] as
 export interface ProfessionDef {
   name: string
   definingSkill: string
-  // Starting Vigor Threshold. UNVERIFIED: the errata doesn't cover these values.
+  // The stat the defining skill rolls with.
+  definingStat: StatKey
+  // Starting Vigor Threshold.
   vigor: number
+  page: number
 }
 
+// Defining skills, their stats and Vigor: core p. 38-46.
+
 export const PROFESSIONS: ProfessionDef[] = [
-  { name: 'Bard', definingSkill: 'Busking', vigor: 0 },
-  { name: 'Craftsman', definingSkill: 'Patch Job', vigor: 0 },
-  { name: 'Criminal', definingSkill: 'Practiced Paranoia', vigor: 0 },
-  { name: 'Doctor', definingSkill: 'Healing Hands', vigor: 0 },
-  { name: 'Mage', definingSkill: 'Magical Training', vigor: 5 },
-  { name: 'Man-At-Arms', definingSkill: 'Tough As Nails', vigor: 0 },
-  { name: 'Merchant', definingSkill: 'Well Traveled', vigor: 0 },
-  { name: 'Priest', definingSkill: 'Initiate of the Gods', vigor: 2 },
-  { name: 'Witcher', definingSkill: 'Witcher Training', vigor: 2 },
+  { name: 'Bard', definingSkill: 'Busking', definingStat: 'EMP', vigor: 0, page: 38 },
+  { name: 'Craftsman', definingSkill: 'Patch Job', definingStat: 'CRA', vigor: 0, page: 39 },
+  { name: 'Criminal', definingSkill: 'Practiced Paranoia', definingStat: 'INT', vigor: 0, page: 40 },
+  { name: 'Doctor', definingSkill: 'Healing Hands', definingStat: 'CRA', vigor: 0, page: 41 },
+  { name: 'Mage', definingSkill: 'Magic Training', definingStat: 'INT', vigor: 5, page: 42 },
+  { name: 'Man-At-Arms', definingSkill: 'Tough As Nails', definingStat: 'BODY', vigor: 0, page: 43 },
+  { name: 'Merchant', definingSkill: 'Well Traveled', definingStat: 'INT', vigor: 0, page: 44 },
+  { name: 'Priest', definingSkill: 'Initiate of the Gods', definingStat: 'EMP', vigor: 2, page: 45 },
+  { name: 'Witcher', definingSkill: 'Witcher Training', definingStat: 'INT', vigor: 2, page: 46 },
 ]
 
 export const HIT_LOCATIONS = ['head', 'torso', 'rArm', 'lArm', 'rLeg', 'lLeg'] as const
@@ -136,9 +145,10 @@ export interface DerivedStats {
   kick: string
 }
 
-// Physical table: everything keys off (BODY + WILL) / 2, rounded down. The Journal stat blocks and
-// the errata confirm REC = Stun = base with Stun capped at 10, Run = SPD × 3, Leap = Run / 5 and
-// Enc = BODY × 10. HP = STA = 5 × base for characters, Punch/Kick by BODY and Resolve are UNVERIFIED.
+// Physical table (core p. 48): HP, STA, REC and Stun key off (BODY + WILL) / 2, rounded down.
+// HP = STA = 5 × base, REC = base, Stun = base capped at 10. Run = SPD × 3 and Leap = Run / 5 (p. 47),
+// Enc = BODY × 10 (p. 48), Punch and Kick from the Hand to Hand table (p. 48), Wound Threshold =
+// max HP / 5 (p. 156) and Resolve = (WILL + INT) / 2 × 5 (Verbal Combat, p. 176).
 export function physicalBase(stats: Stats): number {
   return Math.floor((stats.BODY + stats.WILL) / 2)
 }
@@ -172,6 +182,7 @@ export function derive(stats: Stats): DerivedStats {
   }
 }
 
-// Character creation: skills start capped at 6, and 10 once play begins (race perks can exceed it).
+// Character creation: skills start capped at 6, and 10 once play begins; racial perks can go past
+// either (core p. 49).
 export const SKILL_CAP_AT_CREATION = 6
 export const SKILL_CAP = 10

@@ -287,7 +287,7 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
                 {skills.map((s) => (
                   <SkillRow
                     key={s.id}
-                    name={s.name}
+                    name={s.difficult ? `${s.name} (2)` : s.name}
                     value={c.skills[s.id] ?? 0}
                     base={checkBase(c, s.id)}
                     onChange={(v) => setSkill(s.id, v)}
@@ -314,7 +314,7 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
         })}
       </div>
       <p className="hint">
-        The skill list and each skill's governing stat are from memory of the core book (unverified), so check them against yours.
+        Skills and their governing stats follow the core rulebook (p. 49). Skills marked (2) cost 2 points a level to raise.
       </p>
       <form
         className="panel add-row"

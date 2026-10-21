@@ -61,7 +61,7 @@ export function CatalogSearch(props: {
               <button type="button" className="catalog-result" onClick={() => pick(r)}>
                 <span className="catalog-name">{r.name}</span>
                 <span className="catalog-desc">{describe(r)}</span>
-                <span className="catalog-source">{sourceNote(r) ?? 'Unverified: from memory of the core book, check yours.'}</span>
+                <span className="catalog-source">{sourceNote(r) ?? 'Not priced in the core rulebook: numbers unverified.'}</span>
               </button>
             </li>
           ))}

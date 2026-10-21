@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { rollCheck } from '../rules/dice'
-import { derive, PROFESSIONS, SKILL_BY_ID, type Stats } from '../rules/rules'
-import { homeLanguageSkill, PROFESSION_GEAR, professionSkillIds, STARTING_GEAR_NOTE } from '../model/presets'
+import { derive, PROFESSIONS, SKILL_BY_ID, slug, type Stats } from '../rules/rules'
+import { COMBAT_SKILLS, HOMELAND_BONUS, HOMELANDS, homeLanguageSkill, PROFESSION_GEAR, professionSkillIds, STARTING_GEAR_NOTE } from '../model/presets'
 import { addToCharacter, CATALOG, findEntry, hasOnCharacter, removeFromCharacter, search } from '../model/catalog'
 import { checkBase, derived, toCombatant } from '../model/combat'
 import { allBestiary, BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
@@ -168,6 +168,30 @@ describe('character creator', () => {
     expect(skillBudget(d)).toMatchObject({ professionSpent: 9, professionTotal: 44, pickupSpent: 3, pickupTotal: 13 })
   })
 
+  it('charges 2 points a level for difficult skills (core p. 49)', () => {
+    const d = newDraft()
+    d.character.skills = { alchemy: 3, 'spell-casting': 2, awareness: 2 }
+    d.professionSkills = ['alchemy']
+    expect(skillBudget(d)).toMatchObject({ professionSpent: 6, pickupSpent: 6 })
+  })
+
+  it('wants a point in every profession skill, and five combat skills for a Man-At-Arms (core p. 43, 49)', () => {
+    const d = newDraft()
+    d.character.profession = 'Man-At-Arms'
+    d.professionSkills = ['courage']
+    const texts = creatorIssues(d).map((x) => x.text)
+    expect(texts.some((t) => t.includes('at least 1 point'))).toBe(true)
+    expect(texts.some((t) => t.includes('combat skills'))).toBe(true)
+  })
+
+  it('adds the homeland +1 when finished (core p. 25)', () => {
+    const d = newDraft()
+    d.character.homeland = 'Redania'
+    d.character.skills = { education: 2 }
+    expect(finishDraft(d).skills.education).toBe(3)
+    expect(finishDraft(d).skills['language-common-speech']).toBe(8)
+  })
+
   it('makes one decade row per decade from age 10', () => {
     expect(decadeRows('34').map((r) => r.when)).toEqual(['Age 10s', 'Age 20s', 'Age 30s'])
   })
@@ -211,14 +235,25 @@ describe('bestiary', () => {
 })
 
 describe('creator presets', () => {
-  it('lists ten real skills for every profession', () => {
+  it('lists the book skill package for every profession (core p. 38-46)', () => {
     for (const p of PROFESSIONS) {
       const ids = professionSkillIds(p.name, 'Redania')
-      expect(ids, p.name).toHaveLength(10)
+      // A Man-At-Arms picks five combat skills on top of five set ones; a Merchant has two languages.
+      expect(ids, p.name).toHaveLength(p.name === 'Man-At-Arms' ? 5 : p.name === 'Merchant' ? 11 : 10)
+      expect(new Set(ids).size, p.name).toBe(ids.length)
       for (const id of ids) expect(SKILL_BY_ID[id], `${p.name}: ${id}`).toBeDefined()
     }
+    for (const n of COMBAT_SKILLS) expect(SKILL_BY_ID[slug(n)], n).toBeDefined()
+    expect(professionSkillIds('Merchant', 'Redania').filter((id) => id.startsWith('language-'))).toEqual(['language-elder-speech', 'language-dwarven'])
+    expect(professionSkillIds('Mage', 'Redania')).toContain('seduction')
+    expect(professionSkillIds('Priest', 'Redania')).toContain('teaching')
   })
-  it('gives the home language free and a different one as a profession skill (errata p.49)', () => {
+  it('speaks Elder Speech in Skellige and gives each homeland its +1 (core p. 25, 49)', () => {
+    expect(homeLanguageSkill('Skellige')).toBe('language-elder-speech')
+    expect(homeLanguageSkill('Cintra')).toBe('language-common-speech')
+    for (const g of HOMELANDS) for (const h of g.homelands) expect(SKILL_BY_ID[slug(HOMELAND_BONUS[h])], h).toBeDefined()
+  })
+  it('gives the home language free and a different one as a profession skill (core p. 49)', () => {
     expect(homeLanguageSkill('Mahakam')).toBe('language-dwarven')
     expect(homeLanguageSkill('Vicovaro')).toBe('language-elder-speech')
     expect(homeLanguageSkill('')).toBe('language-common-speech')
@@ -232,7 +267,7 @@ describe('creator presets', () => {
     for (const p of PROFESSIONS) {
       const gear = PROFESSION_GEAR[p.name]
       expect(gear.options.length, p.name).toBeGreaterThanOrEqual(gear.pick)
-      for (const name of gear.options) expect(findEntry(name), `${p.name}: ${name}`).toBeDefined()
+      for (const { name } of [...gear.options, ...(gear.always ?? [])]) expect(findEntry(name), `${p.name}: ${name}`).toBeDefined()
     }
   })
 })
@@ -245,7 +280,7 @@ describe('item catalog', () => {
   })
   it('finds entries by prefix first', () => {
     expect(search('cross', ['weapon'])[0].name).toBe('Crossbow')
-    expect(search('rope', ['gear'])[0].name).toBe('Rope (20 m)')
+    expect(search('rope', ['gear'])[0].name).toBe('Rope, 20m')
   })
   it('puts weapons, armor and gear where they belong', () => {
     let c = newCharacter()
@@ -253,19 +288,40 @@ describe('item catalog', () => {
     expect(c.weapons[0]).toMatchObject({ name: 'Arming Sword', skillId: 'swordsmanship' })
     c = { ...c, ...addToCharacter(c, findEntry('Brigandine')!) }
     expect(c.armor.torso).toMatchObject({ piece: 'Brigandine', sp: 12, maxSp: 12 })
-    expect(c.armor.rArm.piece, 'torso armor covers the arms (errata)').toBe('Brigandine')
+    expect(c.armor.rArm.piece, 'torso armor covers the arms (core p. 79)').toBe('Brigandine')
+    expect(c.armor.torso.ev).toBe(1)
     expect(c.armor.head.piece).toBe('')
-    c = { ...c, ...addToCharacter(c, findEntry('Rope (20 m)')!) }
-    expect(c.items[0]).toMatchObject({ name: 'Rope (20 m)', weight: 2 })
+    c = { ...c, ...addToCharacter(c, findEntry('Rope, 20m')!) }
+    expect(c.items[0]).toMatchObject({ name: 'Rope, 20m', weight: 1.5 })
+    c = { ...c, ...addToCharacter(c, findEntry('Gnomish Chain')!) }
+    expect(c.armor.head.piece, 'armor sets cover everything (core p. 84)').toBe('Gnomish Chain')
+    expect(c.armor.lLeg.sp).toBe(10)
+  })
+  it('carries the book numbers (core p. 73-80)', () => {
+    expect(findEntry('Arming Sword')).toMatchObject({ damage: '2d6+4', reliability: 15, weight: 2.5, cost: 270, page: 73 })
+    expect(findEntry('Crossbow')).toMatchObject({ accuracy: 1, damage: '4d6+2', range: '100 m', effect: 'Slow Reload' })
+    expect(findEntry("Witcher's Silver Sword")).toMatchObject({ hands: 1, effect: 'Silver (3d6)', page: 247 })
+    expect(findEntry('Nilfgaardian Plate Armor')).toMatchObject({ sp: 30, ev: 2, class: 'heavy' })
+    expect(findEntry('Padded Trousers')).toMatchObject({ sp: 5, ev: 0, weight: 1 })
+    expect(findEntry('Steel Kite Shield')).toMatchObject({ reliability: 16, weight: 3 })
+    for (const e of CATALOG) if (e.name !== 'Blanket') expect(e.page, e.name).toBeGreaterThan(0)
+  })
+  it('adds throwing knives as one weapon and a stack in the pack', () => {
+    let c = newCharacter()
+    c = { ...c, ...addToCharacter(c, findEntry('Throwing Knife')!, STARTING_GEAR_NOTE, 5) }
+    expect(c.weapons).toHaveLength(1)
+    expect(c.items[0]).toMatchObject({ name: 'Throwing Knife', qty: 5 })
+    c = { ...c, ...removeFromCharacter(c, findEntry('Throwing Knife')!, STARTING_GEAR_NOTE) }
+    expect([c.weapons.length, c.items.length]).toEqual([0, 0])
   })
   it('takes starting gear back off again', () => {
     let c = newCharacter()
-    for (const n of ['Witcher Steel Sword', 'Brigandine', 'Bedroll']) {
+    for (const n of ["Witcher's Steel Sword", 'Brigandine', 'Bedroll']) {
       const e = findEntry(n)!
       c = { ...c, ...addToCharacter(c, e, STARTING_GEAR_NOTE) }
       expect(hasOnCharacter(c, e, STARTING_GEAR_NOTE), n).toBe(true)
     }
-    for (const n of ['Witcher Steel Sword', 'Brigandine', 'Bedroll']) {
+    for (const n of ["Witcher's Steel Sword", 'Brigandine', 'Bedroll']) {
       const e = findEntry(n)!
       c = { ...c, ...removeFromCharacter(c, e, STARTING_GEAR_NOTE) }
       expect(hasOnCharacter(c, e, STARTING_GEAR_NOTE), n).toBe(false)

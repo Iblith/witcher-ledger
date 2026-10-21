@@ -10,6 +10,7 @@ import {
   newDraft,
   PROFESSION_SKILL_POINTS,
   skillBudget,
+  skillCost,
   STARTING_CROWNS,
   STAT_MAX,
   STAT_MIN,
@@ -20,8 +21,12 @@ import {
 } from '../model/creator'
 import { applyProfession, uid } from '../model/factory'
 import {
+  COMBAT_SKILL_PICKS,
+  COMBAT_SKILLS,
   DEFAULT_HOMELAND,
+  GEAR_EXTRAS,
   HOME_LANGUAGE_VALUE,
+  HOMELAND_BONUS,
   HOMELANDS,
   homelandLanguage,
   homeLanguageSkill,
@@ -29,9 +34,11 @@ import {
   perksText,
   PROFESSION_GEAR,
   professionSkillIds,
+  SCHOOL_PERKS,
   STARTING_GEAR_NOTE,
   secondLanguageSkill,
   WITCHER_SCHOOLS,
+  type GearOption,
 } from '../model/presets'
 import { addToCharacter, describe, findEntry, hasOnCharacter, removeFromCharacter, type CatalogEntry } from '../model/catalog'
 import { CatalogSearch } from './CatalogSearch'
@@ -104,10 +111,8 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
         </button>
       </header>
       <p className="hint creator-source">
-        The app has no copy of the core rulebook's character creation rules. The errata confirms the stat cap of 10, the starting skill cap of
-        6, home language at +8, starting crowns and the Elf Marksman and Dwarf Tough perks. The other racial perk text, the stat point pools, 44
-        profession points, INT + REF pick-up points, profession skill lists and starting gear are from memory and unverified, so check them
-        against your book.
+        Follows the core rulebook: stats p. 47, skills p. 49, races p. 21-24, homelands p. 25, professions p. 38-46 and starting coin p. 71.
+        Lifepath tables are in the book (p. 25-37); note what you roll.
       </p>
 
       <nav className="steps" aria-label="Creation steps">
@@ -308,6 +313,8 @@ function Race({ d, setD }: Omit<StepProps, 'setC'>) {
           )}
         </div>
         {lang && <p className="hint">Native language: {LANGUAGE_NAMES[lang]}, which you start with at +{HOME_LANGUAGE_VALUE} for free.</p>}
+        {HOMELAND_BONUS[c.homeland] && <p className="hint">Homeland bonus: +1 {HOMELAND_BONUS[c.homeland]}, added when you finish (core p. 25).</p>}
+        {c.race === 'Witcher' && SCHOOL_PERKS[c.school] && <p className="hint">{c.school} School: {SCHOOL_PERKS[c.school]} (core p. 238).</p>}
         <TextArea label="Racial perks" rows={4} value={c.perks} onChange={(v) => setD({ ...d, character: { ...c, perks: v } })} />
       </div>
     </Step>
@@ -317,7 +324,7 @@ function Race({ d, setD }: Omit<StepProps, 'setC'>) {
 function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
   const c = d.character
   return (
-    <Step title="Choose your profession" intro="Your profession gives you a defining skill, ten profession skills (starred for you on the Skills step) and starting gear. The skill and gear lists are unverified.">
+    <Step title="Choose your profession" intro="Your profession gives you a defining skill, ten profession skills (starred for you on the Skills step) and starting gear (core p. 38-46).">
       <div className="choice-grid">
         {PROFESSIONS.map((p) => (
           <button
@@ -347,10 +354,15 @@ function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
       {(c.profession === 'Mage' || c.profession === 'Priest') && (
         <p className="hint">
           A new {c.profession} starts with only Novice {c.profession === 'Mage' ? 'spells' : 'invocations'}, Novice rituals and Low Danger hexes
-          (errata p. {c.profession === 'Mage' ? 42 : 45}).
+          (core p. {c.profession === 'Mage' ? 42 : 45}).
         </p>
       )}
-      <p className="hint">Pick-up points can't raise profession skills or buy skill tree abilities (errata p. 49).</p>
+      {c.profession === 'Man-At-Arms' && (
+        <p className="hint">
+          A Man-At-Arms stars any {COMBAT_SKILL_PICKS} combat skills on the Skills step on top of the five set ones: {COMBAT_SKILLS.join(', ')} (core p. 43).
+        </p>
+      )}
+      <p className="hint">Pick-up points can't raise profession skills or buy skill tree abilities (core p. 49).</p>
     </Step>
   )
 }
@@ -397,7 +409,7 @@ function Statistics({ d, setD, setC }: StepProps) {
         </div>
         {d.rolled ? (
           <p className="hint">
-            You rolled {d.rolled.join(', ')} (1s and 2s re-rolled, errata p. 47). Pick one for each stat; each number is used once.
+            You rolled {d.rolled.join(', ')} (1s and 2s re-rolled, core p. 47). Pick one for each stat; each number is used once.
           </p>
         ) : (
           <Budget label="Stat points left" left={left} total={d.poolPoints} />
@@ -480,8 +492,8 @@ function Skills({ d, setD, setC }: StepProps) {
       title="Train your skills"
       intro={
         <>
-          Your profession's skills are starred; those and your defining skill spend the {PROFESSION_SKILL_POINTS} profession points. Tap a star to change the list.
-          Everything else uses pick-up points (INT + REF). No skill can start above {b.cap}.
+          Your profession's skills are starred; those and your defining skill spend the {PROFESSION_SKILL_POINTS} profession points, at least 1 in each. Tap a star to change the list.
+          Everything else uses pick-up points (INT + REF). Skills marked (2) cost 2 points a level. No skill can start above {b.cap} (core p. 49).
         </>
       }
     >
@@ -523,7 +535,15 @@ function Skills({ d, setD, setC }: StepProps) {
                     >
                       ★
                     </button>
-                    <span className="skill-name">{s.name}</span>
+                    <span className="skill-name">
+                      {s.name}
+                      {s.difficult && (
+                        <span className="hint" title={`Difficult skill: 2 points a level, ${skillCost(s.id, c.skills[s.id] ?? 0)} spent`}>
+                          {' '}
+                          (2)
+                        </span>
+                      )}
+                    </span>
                     {s.id === home && c.homeland ? (
                       <span className="skill-input skill-free" title="Your home language starts at +8 for free">
                         {c.skills[s.id] ?? HOME_LANGUAGE_VALUE}
@@ -663,31 +683,51 @@ function StartingGear({ d, setC }: Omit<StepProps, 'setD'>) {
   const c = d.character
   const gear = PROFESSION_GEAR[c.profession]
   if (!gear) return <p className="hint">Choose a profession to see its starting gear.</p>
-  const entries = gear.options.map((n) => findEntry(n)).filter((e): e is CatalogEntry => !!e)
-  const picked = entries.filter((e) => hasOnCharacter(c, e, STARTING_GEAR_NOTE))
-  const toggle = (e: CatalogEntry, on: boolean) => setC(on ? removeFromCharacter(c, e, STARTING_GEAR_NOTE) : addToCharacter(c, e, STARTING_GEAR_NOTE))
+  const resolve = (opts: GearOption[]) =>
+    opts.map((o) => ({ o, e: findEntry(o.name) })).filter((x): x is { o: GearOption; e: CatalogEntry } => !!x.e)
+  const entries = resolve(gear.options)
+  const always = resolve(gear.always ?? [])
+  const picked = entries.filter(({ e }) => hasOnCharacter(c, e, STARTING_GEAR_NOTE))
+  // A crossbow from the list comes with its 20 bolts (core p. 43-44).
+  const toggle = ({ o, e }: { o: GearOption; e: CatalogEntry }, on: boolean) => {
+    const extra = GEAR_EXTRAS[o.name]
+    const extraEntry = extra && findEntry(extra.name)
+    if (on) {
+      let next = { ...c, ...removeFromCharacter(c, e, STARTING_GEAR_NOTE) }
+      if (extraEntry) next = { ...next, ...removeFromCharacter(next, extraEntry, STARTING_GEAR_NOTE) }
+      setC(next)
+    } else {
+      let next = { ...c, ...addToCharacter(c, e, STARTING_GEAR_NOTE, o.qty) }
+      if (extraEntry) next = { ...next, ...addToCharacter(next, extraEntry, STARTING_GEAR_NOTE, extra.qty) }
+      setC(next)
+    }
+  }
+  const row = (x: { o: GearOption; e: CatalogEntry }, on: boolean, disabled: boolean) => (
+    <li key={x.e.name}>
+      <label className="check">
+        <input type="checkbox" checked={on} disabled={disabled} onChange={() => toggle(x, on)} />
+        <span>
+          {x.e.name}
+          {x.o.qty && x.o.qty > 1 ? ` ×${x.o.qty}` : ''}
+          {GEAR_EXTRAS[x.o.name] ? ` and ${GEAR_EXTRAS[x.o.name].qty} bolts` : ''}
+          <span className="catalog-desc">{describe(x.e)}</span>
+        </span>
+      </label>
+    </li>
+  )
   return (
     <section className="panel">
       <div className="gear-head">
         <h3 className="panel-title">{c.profession} starting gear</h3>
         <Budget label="Picks left" left={gear.pick - picked.length} total={gear.pick} />
       </div>
-      <ul className="pick-list">
-        {entries.map((e) => {
-          const on = picked.includes(e)
-          return (
-            <li key={e.name}>
-              <label className="check">
-                <input type="checkbox" checked={on} disabled={!on && picked.length >= gear.pick} onChange={() => toggle(e, on)} />
-                <span>
-                  {e.name}
-                  <span className="catalog-desc">{describe(e)}</span>
-                </span>
-              </label>
-            </li>
-          )
-        })}
-      </ul>
+      <ul className="pick-list">{entries.map((x) => row(x, picked.includes(x), !picked.includes(x) && picked.length >= gear.pick))}</ul>
+      {always.length > 0 && (
+        <>
+          <h4 className="panel-title">Comes with the profession</h4>
+          <ul className="pick-list">{always.map((x) => row(x, hasOnCharacter(c, x.e, STARTING_GEAR_NOTE), false))}</ul>
+        </>
+      )}
     </section>
   )
 }

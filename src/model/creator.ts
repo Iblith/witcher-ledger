@@ -1,24 +1,25 @@
 import { rollD10, type D10 } from '../rules/dice'
-import { derive, SKILL_CAP_AT_CREATION, STAT_KEYS, type Stats } from '../rules/rules'
+import { derive, SKILL_BY_ID, SKILL_CAP_AT_CREATION, slug, STAT_KEYS, type Stats } from '../rules/rules'
 import { newCharacter, uid } from './factory'
 import { findEntry, removeFromCharacter } from './catalog'
-import { HOME_LANGUAGE_VALUE, homeLanguageSkill, PROFESSION_GEAR, STARTING_GEAR_NOTE } from './presets'
+import { COMBAT_SKILL_PICKS, GEAR_EXTRAS, HOME_LANGUAGE_VALUE, HOMELAND_BONUS, homeLanguageSkill, PROFESSION_GEAR, PROFESSION_SKILLS, STARTING_GEAR_NOTE } from './presets'
 import type { Character, CharacterKind, Item, LifeEvent, LifeEventKind } from './types'
 
-// Stat point pools by campaign power level. The GM decides which one the table uses. The errata
-// (p. 47) says the GM sets the pool from a table it does not reprint, so these numbers are UNVERIFIED.
+// Stat point pools by game type; the GM decides which one the table uses (core p. 47).
 export const STAT_POOLS = [
   { id: 'average', label: 'Average', points: 60 },
   { id: 'skilled', label: 'Skilled', points: 70 },
-  { id: 'heroic', label: 'Heroic', points: 75 },
-  { id: 'legendary', label: 'Legendary', points: 80 },
+  { id: 'heroic', label: 'Heroes', points: 75 },
+  { id: 'legendary', label: 'Legends', points: 80 },
 ] as const
 
+// Point-buy stats run 2-10 here; rolled stats re-roll 1s and 2s, and the Statistic Cap is 10 (p. 47).
 export const STAT_MIN = 2
 export const STAT_MAX = 10
+// 44 points for the skill package and defining skill, at least 1 in each (core p. 49).
 export const PROFESSION_SKILL_POINTS = 44
 
-// Average starting crowns by profession (v4 errata, page 71).
+// Starting coin is a profession's base × 2d6 crowns; these are the averages (core p. 71).
 export const STARTING_CROWNS: Record<string, number> = {
   Bard: 840,
   Craftsman: 840,
@@ -62,7 +63,7 @@ export interface CreatorDraft {
   rolled?: number[]
 }
 
-// Rolling stats (errata p. 47): 1d10 nine times, re-rolling 1s and 2s, then place one on each stat.
+// Rolling stats (core p. 47): 1d10 nine times, re-rolling 1s and 2s, then place one on each stat.
 export function rollStats(d10: D10 = rollD10): number[] {
   return Array.from({ length: STAT_KEYS.length }, () => {
     let r = d10()
@@ -95,8 +96,13 @@ export function statPointsSpent(stats: Stats): number {
   return STAT_KEYS.reduce((sum, k) => sum + stats[k], 0)
 }
 
+// What a skill level costs: 2 points a level for difficult skills, 1 for the rest (core p. 49).
+export function skillCost(id: string, level: number): number {
+  return SKILL_BY_ID[id]?.difficult ? level * 2 : level
+}
+
 // Profession skills (and the defining skill) spend the 44 profession points;
-// everything else comes out of the pick-up pool, which is INT + REF.
+// everything else comes out of the pick-up pool, which is INT + REF (core p. 49).
 export function skillBudget(d: CreatorDraft) {
   const c = d.character
   const prof = new Set(d.professionSkills)
@@ -105,7 +111,7 @@ export function skillBudget(d: CreatorDraft) {
   let pickupSpent = 0
   for (const [id, raw] of Object.entries(c.skills)) {
     // The home language's first +8 is free.
-    const v = id === home ? Math.max(0, raw - HOME_LANGUAGE_VALUE) : raw
+    const v = skillCost(id, id === home ? Math.max(0, raw - HOME_LANGUAGE_VALUE) : raw)
     if (prof.has(id)) professionSpent += v
     else pickupSpent += v
   }
@@ -150,6 +156,10 @@ export function creatorIssues(d: CreatorDraft): CreatorIssue[] {
     issues.push({ step: 4, text: `Profession skills are ${b.professionSpent - b.professionTotal} points over.` })
   if (b.pickupSpent > b.pickupTotal)
     issues.push({ step: 4, text: `Pick-up skills are ${b.pickupSpent - b.pickupTotal} points over.` })
+  if (c.profession && (d.professionSkills.some((id) => (c.skills[id] ?? 0) < 1) || c.definingSkillValue < 1))
+    issues.push({ step: 4, text: 'Put at least 1 point in every profession skill and your defining skill.' })
+  if (c.profession === 'Man-At-Arms' && d.professionSkills.length < PROFESSION_SKILLS['Man-At-Arms'].length + COMBAT_SKILL_PICKS)
+    issues.push({ step: 4, text: `Star ${COMBAT_SKILL_PICKS} combat skills to finish the Man-At-Arms skill package.` })
   return issues
 }
 
@@ -162,6 +172,9 @@ export function finishDraft(d: CreatorDraft): Character {
   c.luckCurrent = c.stats.LUCK
   const home = homeLanguageSkill(c.homeland)
   c.skills = { ...c.skills, [home]: Math.max(c.skills[home] ?? 0, HOME_LANGUAGE_VALUE) }
+  // The homeland's free +1 (core p. 25).
+  const bonus = HOMELAND_BONUS[c.homeland]
+  if (bonus) c.skills[slug(bonus)] = (c.skills[slug(bonus)] ?? 0) + 1
   c.skills = Object.fromEntries(Object.entries(c.skills).filter(([, v]) => v > 0))
   const family: LifeEvent[] = []
   for (const f of FAMILY_FIELDS) {
@@ -180,7 +193,8 @@ export function finishDraft(d: CreatorDraft): Character {
 // Takes off everything the old profession's starting gear put on the sheet.
 export function clearStartingGear(c: Character): Character {
   let next = c
-  for (const name of PROFESSION_GEAR[c.profession]?.options ?? []) {
+  const g = PROFESSION_GEAR[c.profession]
+  for (const { name } of [...(g?.options ?? []), ...(g?.always ?? []), ...Object.values(GEAR_EXTRAS)]) {
     const e = findEntry(name)
     if (e) next = { ...next, ...removeFromCharacter(next, e, STARTING_GEAR_NOTE) }
   }
