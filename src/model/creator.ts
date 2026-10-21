@@ -1,10 +1,12 @@
+import { rollD10, type D10 } from '../rules/dice'
 import { derive, SKILL_CAP_AT_CREATION, STAT_KEYS, type Stats } from '../rules/rules'
 import { newCharacter, uid } from './factory'
 import { findEntry, removeFromCharacter } from './catalog'
 import { HOME_LANGUAGE_VALUE, homeLanguageSkill, PROFESSION_GEAR, STARTING_GEAR_NOTE } from './presets'
 import type { Character, CharacterKind, Item, LifeEvent, LifeEventKind } from './types'
 
-// Stat point pools by campaign power level. The GM decides which one the table uses.
+// Stat point pools by campaign power level. The GM decides which one the table uses. The errata
+// (p. 47) says the GM sets the pool from a table it does not reprint, so these numbers are UNVERIFIED.
 export const STAT_POOLS = [
   { id: 'average', label: 'Average', points: 60 },
   { id: 'skilled', label: 'Skilled', points: 70 },
@@ -56,6 +58,23 @@ export interface CreatorDraft {
   professionSkills: string[]
   family: Record<FamilyField, string>
   decades: DecadeEntry[]
+  // Set when the stats were rolled instead of bought: the nine numbers to place, one per stat.
+  rolled?: number[]
+}
+
+// Rolling stats (errata p. 47): 1d10 nine times, re-rolling 1s and 2s, then place one on each stat.
+export function rollStats(d10: D10 = rollD10): number[] {
+  return Array.from({ length: STAT_KEYS.length }, () => {
+    let r = d10()
+    while (r <= 2) r = d10()
+    return r
+  })
+}
+
+export function rolledStatsPlaced(stats: Stats, rolled: number[]): boolean {
+  const a = STAT_KEYS.map((k) => stats[k]).sort((x, y) => x - y)
+  const b = [...rolled].sort((x, y) => x - y)
+  return a.every((v, i) => v === b[i])
 }
 
 export function newDraft(kind: CharacterKind = 'pc'): CreatorDraft {
@@ -123,8 +142,9 @@ export function creatorIssues(d: CreatorDraft): CreatorIssue[] {
   if (!c.name.trim()) issues.push({ step: 0, text: 'Give your character a name.' })
   if (!c.profession) issues.push({ step: 2, text: 'Choose a profession.' })
   const spent = statPointsSpent(c.stats)
-  if (spent !== d.poolPoints)
-    issues.push({ step: 3, text: `Statistics use ${spent} of ${d.poolPoints} points.` })
+  if (d.rolled) {
+    if (!rolledStatsPlaced(c.stats, d.rolled)) issues.push({ step: 3, text: 'Place each rolled number on one stat.' })
+  } else if (spent !== d.poolPoints) issues.push({ step: 3, text: `Statistics use ${spent} of ${d.poolPoints} points.` })
   const b = skillBudget(d)
   if (b.professionSpent > b.professionTotal)
     issues.push({ step: 4, text: `Profession skills are ${b.professionSpent - b.professionTotal} points over.` })

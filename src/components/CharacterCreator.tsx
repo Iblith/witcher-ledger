@@ -14,6 +14,7 @@ import {
   STAT_MAX,
   STAT_MIN,
   STAT_POOLS,
+  rollStats,
   statPointsSpent,
   type CreatorDraft,
 } from '../model/creator'
@@ -342,6 +343,13 @@ function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
           </button>
         ))}
       </div>
+      {(c.profession === 'Mage' || c.profession === 'Priest') && (
+        <p className="hint">
+          A new {c.profession} starts with only Novice {c.profession === 'Mage' ? 'spells' : 'invocations'}, Novice rituals and Low Danger hexes
+          (errata p. {c.profession === 'Mage' ? 42 : 45}).
+        </p>
+      )}
+      <p className="hint">Pick-up points can't raise profession skills or buy skill tree abilities (errata p. 49).</p>
     </Step>
   )
 }
@@ -355,32 +363,60 @@ function Statistics({ d, setD, setC }: StepProps) {
   return (
     <Step
       title="Assign your statistics"
-      intro={`Split your points across the nine stats, between ${STAT_MIN} and ${STAT_MAX} each. Ask your GM which power level the campaign uses.`}
+      intro={`Split your points across the nine stats, between ${STAT_MIN} and ${STAT_MAX} each, or roll them. Ask your GM which the campaign uses.`}
     >
       <div className="panel">
         <div className="pool-picker">
+          <button
+            type="button"
+            className={'cond' + (d.rolled ? ' cond-on' : '')}
+            aria-pressed={!!d.rolled}
+            onClick={() => {
+              const rolled = rollStats()
+              setD({ ...d, rolled, poolId: 'rolled', poolPoints: rolled.reduce((a, b) => a + b, 0) })
+            }}
+          >
+            {d.rolled ? 'Roll again' : 'Roll 9 × 1d10'}
+          </button>
           {STAT_POOLS.map((p) => (
             <button
               key={p.id}
               type="button"
               className={'cond' + (d.poolId === p.id ? ' cond-on' : '')}
               aria-pressed={d.poolId === p.id}
-              onClick={() => setD({ ...d, poolId: p.id, poolPoints: p.points })}
+              onClick={() => setD({ ...d, rolled: undefined, poolId: p.id, poolPoints: p.points })}
             >
               {p.label} ({p.points})
             </button>
           ))}
           <label className="pool-custom">
             <span className="field-label">Custom</span>
-            <NumberInput ariaLabel="Custom stat points" value={d.poolPoints} min={18} onChange={(v) => setD({ ...d, poolId: 'custom', poolPoints: v })} />
+            <NumberInput ariaLabel="Custom stat points" value={d.poolPoints} min={18} onChange={(v) => setD({ ...d, rolled: undefined, poolId: 'custom', poolPoints: v })} />
           </label>
         </div>
-        <Budget label="Stat points left" left={left} total={d.poolPoints} />
+        {d.rolled ? (
+          <p className="hint">
+            You rolled {d.rolled.join(', ')} (1s and 2s re-rolled, errata p. 47). Pick one for each stat; each number is used once.
+          </p>
+        ) : (
+          <Budget label="Stat points left" left={left} total={d.poolPoints} />
+        )}
       </div>
       <div className="stat-grid">
         {STAT_KEYS.map((k) => (
           <div className="stat" key={k}>
             <span className="stat-key-static">{k}</span>
+            {d.rolled ? (
+              <select aria-label={STAT_NAMES[k]} value={c.stats[k]} onChange={(e) => setC({ stats: { ...c.stats, [k]: Number(e.target.value) } })}>
+                {[...new Set([c.stats[k], ...d.rolled])]
+                  .sort((a, b) => b - a)
+                  .map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+              </select>
+            ) : (
             <div className="stepper">
               <button type="button" className="icon-btn" aria-label={`Lower ${STAT_NAMES[k]}`} onClick={() => setStat(k, c.stats[k] - 1)} disabled={c.stats[k] <= STAT_MIN}>
                 −
@@ -390,6 +426,7 @@ function Statistics({ d, setD, setC }: StepProps) {
                 +
               </button>
             </div>
+            )}
             <span className="stat-name">{STAT_NAMES[k]}</span>
           </div>
         ))}

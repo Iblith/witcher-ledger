@@ -16,6 +16,8 @@ export interface ArmorSlot {
   piece: string
   sp: number
   maxSp: number
+  // Encumbrance Value of the piece in this slot. A piece covering several slots counts once.
+  ev?: number
 }
 
 export interface Weapon {

@@ -23,6 +23,8 @@ export interface EncounterEntry {
   rec?: number
   // Takes half damage by default in the damage form (monsters vs non-silver). Older fights: monsters only.
   resistant?: boolean
+  // Natural SP on every location that armor damage never reduces (Dwarf Tough).
+  toughSp?: number
   sp: Record<HitLocation, number>
   defenses: Combatant['defenses']
   attacks: Combatant['attacks']
@@ -120,6 +122,7 @@ export function entryFromCharacter(c: Character): EncounterEntry {
     stun: cb.stun,
     woundThreshold: cb.rec,
     rec: cb.rec,
+    toughSp: cb.toughSp,
     // Monsters resist non-silver weapons; beasts and people don't (errata p. 162).
     resistant: c.race === 'Monster' && c.bestiary?.category !== 'Beast',
     sp: { ...cb.sp },
@@ -259,16 +262,17 @@ export interface DamageResult {
 // down, minimum 1), then halved for resistance or doubled for susceptibility, and the armor there
 // loses 1 SP. Damage that doesn't beat SP does nothing. (Easy Mode p. 18; errata p. 154-155.)
 export function applyDamage(x: EncounterEntry, d: DamageInput): DamageResult {
-  const sp = d.ignoreArmor ? 0 : x.sp[d.location]
+  const armorSp = d.ignoreArmor ? 0 : x.sp[d.location]
+  const sp = d.ignoreArmor ? 0 : armorSp + (x.toughSp ?? 0)
   const through = Math.max(0, d.amount - sp)
   let hpLoss = through > 0 ? Math.max(1, Math.floor(through * LOCATION_MULTIPLIER[d.location])) : 0
   if (d.resistant && !d.vulnerable) hpLoss = Math.floor(hpLoss / 2)
   if (d.vulnerable && !d.resistant) hpLoss *= 2
-  const ablated = through > 0 && !d.ignoreArmor && sp > 0
+  const ablated = through > 0 && !d.ignoreArmor && armorSp > 0
   const entry: EncounterEntry = {
     ...x,
     hp: { ...x.hp, current: x.hp.current - hpLoss },
-    sp: ablated ? { ...x.sp, [d.location]: sp - 1 } : x.sp,
+    sp: ablated ? { ...x.sp, [d.location]: armorSp - 1 } : x.sp,
   }
   const where = d.location === 'head' ? 'head' : d.location === 'torso' ? 'torso' : 'limb'
   const summary =

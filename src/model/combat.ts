@@ -1,4 +1,7 @@
 import { derive, HIT_LOCATIONS, SKILL_BY_ID, type DerivedStats, type HitLocation, type StatKey } from '../rules/rules'
+
+// Skills that armor EV hampers on top of REF and DEX (errata p. 78, EV & Magic).
+const EV_MAGIC_SKILLS = new Set(['spell-casting', 'hex-weaving', 'ritual-crafting'])
 import type { Character, CharacterKind } from './types'
 
 export interface CharacterDerived extends DerivedStats {
@@ -19,12 +22,35 @@ export function skillValue(c: Character, skillId: string): number {
   return c.skills[skillId] ?? 0
 }
 
+// Total Encumbrance Value of worn armor. A piece that fills several slots (torso armor covers the
+// arms, trousers both legs) counts once.
+export function armorEv(c: Character): number {
+  const byPiece = new Map<string, number>()
+  let loose = 0
+  for (const l of HIT_LOCATIONS) {
+    const a = c.armor[l]
+    const ev = a.ev ?? 0
+    if (!ev) continue
+    if (a.piece.trim()) byPiece.set(a.piece.trim(), Math.max(byPiece.get(a.piece.trim()) ?? 0, ev))
+    else loose += ev
+  }
+  return [...byPiece.values()].reduce((s, v) => s + v, loose)
+}
+
+// Armor EV is subtracted from REF and DEX, to a minimum of 1 (errata p. 78).
+export function effectiveStat(c: Character, k: StatKey): number {
+  if (k !== 'REF' && k !== 'DEX') return c.stats[k]
+  const ev = armorEv(c)
+  return ev ? Math.max(1, c.stats[k] - ev) : c.stats[k]
+}
+
 // STAT + skill, the fixed part of every check before the d10.
 export function checkBase(c: Character, skillId: string): number {
+  const magic = EV_MAGIC_SKILLS.has(skillId) ? armorEv(c) : 0
   const def = SKILL_BY_ID[skillId]
-  if (def) return c.stats[def.stat] + skillValue(c, skillId)
+  if (def) return effectiveStat(c, def.stat) + skillValue(c, skillId) - magic
   const custom = c.customSkills.find((k) => k.id === skillId)
-  return custom ? c.stats[custom.stat] + custom.value : 0
+  return custom ? effectiveStat(c, custom.stat) + custom.value : 0
 }
 
 export function statForSkill(c: Character, skillId: string): StatKey | undefined {
@@ -88,6 +114,7 @@ export interface Combatant {
   sta: { current: number; max: number }
   stun: number
   rec: number
+  toughSp: number
   sp: Record<HitLocation, number>
   defenses: { dodge: number; reposition: number }
   attacks: Array<{ name: string; base: number; damage: string }>
@@ -99,7 +126,9 @@ export function toCombatant(c: Character): Combatant {
     characterId: c.id,
     kind: c.kind,
     name: c.name,
-    initiativeBase: c.stats.REF,
+    initiativeBase: effectiveStat(c, 'REF'),
+    // Dwarf Tough: +2 SP everywhere on top of armor, never ablated (errata p. 23).
+    toughSp: c.race === 'Dwarf' ? 2 : 0,
     hp: { current: c.hp.current, max: d.maxHp },
     sta: { current: c.sta.current, max: d.maxSta },
     stun: d.stun,

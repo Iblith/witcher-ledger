@@ -320,7 +320,7 @@ export function addToCharacter(c: Character, e: CatalogEntry, notes = ''): Parti
   if (e.kind === 'weapon') return { weapons: [...c.weapons, toWeapon(e, notes)] }
   if (e.kind === 'armor') {
     const armor = { ...c.armor }
-    for (const loc of COVERED[e.covers]) armor[loc] = { piece: e.name, sp: e.sp, maxSp: e.sp }
+    for (const loc of COVERED[e.covers]) armor[loc] = { piece: e.name, sp: e.sp, maxSp: e.sp, ev: e.ev }
     return { armor }
   }
   return { items: [...c.items, toItem(e, notes)] }
@@ -331,7 +331,7 @@ export function removeFromCharacter(c: Character, e: CatalogEntry, notes: string
   if (e.kind === 'weapon') return { weapons: c.weapons.filter((x) => !(x.name === e.name && x.notes === notes)) }
   if (e.kind === 'armor') {
     const armor = { ...c.armor }
-    for (const loc of HIT_LOCATIONS) if (armor[loc].piece === e.name) armor[loc] = { piece: '', sp: 0, maxSp: 0 }
+    for (const loc of HIT_LOCATIONS) if (armor[loc].piece === e.name) armor[loc] = { piece: '', sp: 0, maxSp: 0, ev: 0 }
     return { armor }
   }
   return { items: c.items.filter((x) => !(x.name === e.name && x.notes.endsWith(notes))) }

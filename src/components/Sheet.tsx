@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { castSpell, checkBase, derived, carriedWeight, recoverAction, restDay, restHour, staCostNumber } from '../model/combat'
+import { armorEv, castSpell, checkBase, derived, carriedWeight, effectiveStat, recoverAction, restDay, restHour, staCostNumber } from '../model/combat'
 import { applyProfession, uid } from '../model/factory'
 import type { Character, Item, Spell, SpellKind, Weapon } from '../model/types'
 import {
@@ -201,7 +201,14 @@ function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
             ) : null
           }
         />
-        <Pool label="Luck" tone="luck" current={c.luckCurrent} max={c.stats.LUCK} onChange={(v) => set({ luckCurrent: v })} />
+        <Pool
+          label="Luck"
+          tone="luck"
+          current={c.luckCurrent}
+          max={c.stats.LUCK}
+          onChange={(v) => set({ luckCurrent: v })}
+          footer={<p className="hint">Spend before a roll: +1 per point (raises a Death save target). Refills each session (errata p. 47).</p>}
+        />
       </section>
 
       <Recovery c={c} set={set} onRoll={onRoll} />
@@ -320,12 +327,12 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
                     name={s.name}
                     custom
                     value={s.value}
-                    base={c.stats[s.stat] + s.value}
+                    base={checkBase(c, s.id)}
                     onChange={(v) =>
                       set({ customSkills: c.customSkills.map((k) => (k.id === s.id ? { ...k, value: Math.max(0, v) } : k)) })
                     }
                     onRemove={() => set({ customSkills: c.customSkills.filter((k) => k.id !== s.id) })}
-                    onRoll={() => onRoll(s.name, c.stats[s.stat] + s.value)}
+                    onRoll={() => onRoll(s.name, checkBase(c, s.id))}
                   />
                 ))}
               </ul>
@@ -421,10 +428,16 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
           <button type="button" className="btn" onClick={() => onRoll('Reposition', checkBase(c, 'athletics'))}>
             Reposition {checkBase(c, 'athletics')}
           </button>
-          <button type="button" className="btn" onClick={() => onRoll('Initiative', c.stats.REF)}>
-            Initiative {c.stats.REF}
+          <button type="button" className="btn" onClick={() => onRoll('Initiative', effectiveStat(c, 'REF'))}>
+            Initiative {effectiveStat(c, 'REF')}
           </button>
         </div>
+        {armorEv(c) > 0 && (
+          <p className="hint">
+            Armor EV {armorEv(c)}: −{armorEv(c)} to REF and DEX (minimum 1) and to Spell Casting, Hex Weaving and Ritual Crafting. Already counted in
+            the numbers on this sheet (errata p. 78).
+          </p>
+        )}
       </section>
 
       <section className="panel">
@@ -458,6 +471,7 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
                 <th>Piece</th>
                 <th>SP</th>
                 <th>Max</th>
+                <th>EV</th>
                 <th aria-label="Repair" />
               </tr>
             </thead>
@@ -483,6 +497,9 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
                       <NumberInput ariaLabel={`${HIT_LOCATION_NAMES[loc]} max SP`} value={a.maxSp} min={0} onChange={(v) => upd({ maxSp: v, sp: a.sp === a.maxSp ? v : Math.min(a.sp, v) })} />
                     </td>
                     <td>
+                      <NumberInput ariaLabel={`${HIT_LOCATION_NAMES[loc]} EV`} value={a.ev ?? 0} min={0} onChange={(v) => upd({ ev: v })} />
+                    </td>
+                    <td>
                       {a.sp < a.maxSp && (
                         <button type="button" className="btn-chip" onClick={() => upd({ sp: a.maxSp })}>
                           Repair
@@ -495,6 +512,8 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
             </tbody>
           </table>
         </div>
+        <p className="hint">A piece that covers several locations counts its EV once.</p>
+        {c.race === 'Dwarf' && <p className="hint">Tough: +2 SP on every location on top of armor, never ablated (errata p. 23). The encounter tracker adds it for you.</p>}
       </section>
 
       <section className="panel">

@@ -219,9 +219,9 @@ function EntryRow(props: {
           </div>
           <div className="sp-strip" aria-label="Armor SP by location">
             {HIT_LOCATIONS.map((l) => (
-              <span key={l} className="sp-chip" title={`${HIT_LOCATION_NAMES[l]} SP`}>
+              <span key={l} className="sp-chip" title={`${HIT_LOCATION_NAMES[l]} SP${x.toughSp ? ` (${x.sp[l]} armor + ${x.toughSp} Tough)` : ''}`}>
                 <span>{SP_SHORT[l]}</span>
-                <strong>{x.sp[l]}</strong>
+                <strong>{x.sp[l] + (x.toughSp ?? 0)}</strong>
               </span>
             ))}
           </div>
@@ -350,7 +350,7 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
           <select value={location} onChange={(ev) => setLocation(ev.target.value as HitLocation)}>
             {HIT_LOCATIONS.map((l) => (
               <option key={l} value={l}>
-                {HIT_LOCATION_NAMES[l]} (SP {x.sp[l]})
+                {HIT_LOCATION_NAMES[l]} (SP {x.sp[l] + (x.toughSp ?? 0)})
               </option>
             ))}
           </select>

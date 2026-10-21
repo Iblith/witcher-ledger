@@ -168,3 +168,42 @@ describe('catalog corrections from the Easy Mode pregens', () => {
     expect(w('Short Bow').damage).toBe('3d6+3')
   })
 })
+
+describe('errata checks on creation and the sheet', () => {
+  it('rolls nine stats, re-rolling 1s and 2s (errata p.47)', async () => {
+    const { rollStats, rolledStatsPlaced } = await import('../model/creator')
+    const seq = [1, 2, 3, 10, 4, 5, 6, 7, 8, 9, 2, 3]
+    const r = rollStats(() => seq.shift()!)
+    expect(r).toEqual([3, 10, 4, 5, 6, 7, 8, 9, 3])
+    expect(rolledStatsPlaced(st(10, 3, 4, 5, 6, 7, 8, 9, 3), r)).toBe(true)
+    expect(rolledStatsPlaced(st(10, 10, 4, 5, 6, 7, 8, 9, 3), r)).toBe(false)
+  })
+  it('armor EV lowers REF and DEX skills (min 1) and magic skills, counting a piece once (errata p.78)', async () => {
+    const { checkBase, effectiveStat, armorEv } = await import('../model/combat')
+    const { addToCharacter, findEntry } = await import('../model/catalog')
+    const c = newCharacter('pc')
+    c.stats = st(5, 6, 6, 5, 5, 5, 5, 5)
+    c.skills = { swordsmanship: 4, 'spell-casting': 3, awareness: 2 }
+    const armor = findEntry('Brigandine')!
+    const worn = { ...c, ...addToCharacter(c, armor) }
+    const ev = (armor as { ev: number }).ev
+    expect(armorEv(worn)).toBe(ev)
+    expect(checkBase(worn, 'swordsmanship')).toBe(6 - ev + 4)
+    expect(checkBase(worn, 'spell-casting')).toBe(5 + 3 - ev)
+    expect(checkBase(worn, 'awareness')).toBe(7)
+    worn.armor.head = { piece: 'Great helm', sp: 20, maxSp: 20, ev: 9 }
+    expect(effectiveStat(worn, 'REF')).toBe(1)
+  })
+  it('Dwarf Tough adds 2 SP in fights that ablation never touches (errata p.23)', () => {
+    const c = newCharacter('pc')
+    c.race = 'Dwarf'
+    c.armor.torso = { piece: 'Gambeson', sp: 3, maxSp: 3 }
+    const x = entryFromCharacter(c)
+    expect(applyDamage(x, { amount: 5, location: 'torso', ignoreArmor: false, resistant: false }).hpLoss).toBe(0)
+    const r = applyDamage(x, { amount: 8, location: 'torso', ignoreArmor: false, resistant: false })
+    expect(r.hpLoss).toBe(3)
+    expect(r.entry.sp.torso).toBe(2)
+    const bare = applyDamage(x, { amount: 4, location: 'head', ignoreArmor: false, resistant: false })
+    expect([bare.hpLoss, bare.entry.sp.head]).toEqual([2 * 3, 0])
+  })
+})
