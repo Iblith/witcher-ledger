@@ -24,6 +24,7 @@ import {
 import type { Character } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
+import { BattleMap } from './BattleMap'
 import { blankInjury, cap, SEVERITIES } from '../model/injuries'
 import type { CritSeverity } from '../model/types'
 
@@ -41,6 +42,8 @@ export interface TrackerProps {
 export function EncounterTracker({ encounter: e, characters, onChange, onRoll, onWriteBack }: TrackerProps) {
   const [adding, setAdding] = useState(false)
   const [damageFor, setDamageFor] = useState<string | null>(null)
+  // One selection shared by the map tokens and the rows below.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   // Remembers which version of the fight was saved, so a new hit shows the button again.
   const [savedEntries, setSavedEntries] = useState<EncounterEntry[] | null>(null)
   const wroteBack = savedEntries === e.entries
@@ -111,6 +114,16 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
         />
       )}
 
+      {e.entries.length > 0 && (
+        <BattleMap
+          encounter={e}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onShowInList={(id) => document.getElementById(`entry-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+          onChange={(map) => onChange({ ...e, map })}
+        />
+      )}
+
       {e.entries.length === 0 ? (
         <div className="panel">
           <p className="hint">
@@ -126,6 +139,8 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
               x={x}
               active={x.id === e.activeId}
               upNext={x.id === upNextId && upNextId !== e.activeId}
+              selected={x.id === selectedId}
+              onSelect={() => setSelectedId(x.id === selectedId ? null : x.id)}
               damageOpen={damageFor === x.id}
               onToggleDamage={() => setDamageFor(damageFor === x.id ? null : x.id)}
               onChange={(patch) => updEntry(x.id, patch)}
@@ -227,6 +242,8 @@ function EntryRow(props: {
   x: EncounterEntry
   active: boolean
   upNext: boolean
+  selected: boolean
+  onSelect: () => void
   damageOpen: boolean
   onToggleDamage: () => void
   onChange: (patch: Partial<EncounterEntry>) => void
@@ -241,7 +258,15 @@ function EntryRow(props: {
   const pct = x.hp.max > 0 ? Math.max(0, Math.min(100, (x.hp.current / x.hp.max) * 100)) : 0
   const staPct = x.sta.max > 0 ? Math.max(0, Math.min(100, (x.sta.current / x.sta.max) * 100)) : 0
   return (
-    <li className={`entry entry-${x.kind} entry-${state}${props.active ? ' entry-active' : ''}`} aria-current={props.active ? 'step' : undefined}>
+    <li
+      id={`entry-${x.id}`}
+      className={`entry entry-${x.kind} entry-${state}${props.active ? ' entry-active' : ''}${props.selected ? ' entry-selected' : ''}`}
+      aria-current={props.active ? 'step' : undefined}
+      // Tapping a bare part of the row picks its token on the map; the controls keep their own taps.
+      onClick={(ev) => {
+        if (!(ev.target as HTMLElement).closest('input, button, select, label, textarea, form, a')) props.onSelect()
+      }}
+    >
       <div className="entry-init">
         <span className="field-label">Init</span>
         <input

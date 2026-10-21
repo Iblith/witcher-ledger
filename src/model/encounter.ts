@@ -2,6 +2,7 @@ import { rollCheck, rollD10, type D10 } from '../rules/dice'
 import { HIT_LOCATIONS, type HitLocation } from '../rules/rules'
 import { toCombatant, type Combatant } from './combat'
 import { uid } from './factory'
+import type { BattleMap } from './battlemap'
 import type { Character, CriticalWound } from './types'
 
 export type EntryKind = 'pc' | 'npc' | 'monster'
@@ -48,6 +49,8 @@ export interface Encounter {
   activeId: string | null
   entries: EncounterEntry[]
   log: string[]
+  // Where everyone stands. Older saved fights have none.
+  map?: BattleMap
   createdAt: number
   updatedAt: number
 }

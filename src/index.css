@@ -624,3 +624,56 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .add-player { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .add-player-row { display: flex; gap: 6px; }
 .add-player-row select { flex: 1 1 0; min-width: 0; }
+
+/* Battle map: a plain grid of tokens for where everyone stands. */
+.entry-selected { outline: 2px dashed var(--steel); outline-offset: 2px; }
+.map-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.map-settings { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; align-items: end; }
+.map-settings-note { grid-column: 1 / -1; }
+.map-scroll { overflow: auto; max-width: 100%; max-height: 70vh; border-radius: 4px; overscroll-behavior: contain; }
+.map-board {
+  position: relative; margin: 0 auto; background-color: var(--sunk);
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  -webkit-user-select: none; user-select: none;
+}
+.token {
+  --tone: var(--blood);
+  position: absolute; display: grid; place-items: center; padding: 3px; margin: 0;
+  background: transparent; border: 0; cursor: grab; touch-action: none;
+  -webkit-tap-highlight-color: transparent; transition: left 0.12s, top 0.12s;
+}
+.token > span {
+  width: 100%; height: 100%; display: grid; place-items: center; border-radius: 50%;
+  background: var(--tone); color: var(--surface); border: 2px solid var(--surface);
+  font-family: var(--font-num); font-weight: 700; line-height: 1; letter-spacing: -0.02em;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35); overflow: hidden; white-space: nowrap;
+}
+.token-pc { --tone: var(--steel); }
+.token-npc { --tone: var(--gold); }
+.token-monster > span { border-radius: 22%; }
+.token-wounded > span { border-style: dashed; }
+.token-dying > span { background: var(--blood-soft); color: var(--blood); border-color: var(--blood); }
+.token-defeated { opacity: 0.35; }
+.token-defeated > span { text-decoration: line-through; }
+.token-active > span { box-shadow: 0 0 0 3px var(--gold), 0 0 10px 2px var(--gold); }
+.token-selected > span { outline: 3px solid var(--fg); outline-offset: 1px; }
+.token-dragging { z-index: 5; cursor: grabbing; transition: none; }
+.token-dragging > span { transform: scale(1.12); }
+.map-ghost { position: absolute; background: var(--gold-soft); outline: 2px dashed var(--gold); outline-offset: -3px; pointer-events: none; }
+.map-tray { display: flex; flex-direction: column; gap: 6px; }
+.map-tray-tokens { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-tray .token { position: relative; font-size: 13px; }
+.token-static { position: relative; width: 34px; height: 34px; font-size: 12px; cursor: default; flex: none; }
+.map-selected { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.map-selected-name { font-family: var(--font-display); }
+.map-selected-hp { font-family: var(--font-num); font-size: 0.9rem; }
+@media (max-width: 760px) {
+  .battle-map { padding: 10px; }
+  .map-scroll { max-height: 60vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .token { transition: none; }
+}
