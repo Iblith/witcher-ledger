@@ -162,3 +162,44 @@ describe('errata checks on creation and the sheet', () => {
     expect([bare.hpLoss, bare.entry.sp.head]).toEqual([2 * 3, 0])
   })
 })
+
+describe('healing and critical wounds (errata p. 103, 173-174)', () => {
+  const hurt = async () => {
+    const { blankInjury } = await import('../model/injuries')
+    const c = newCharacter('pc')
+    c.hp.current = 5
+    c.healingStarted = true
+    c.crits = [{ ...blankInjury(), treated: true, severity: 'complex' }, { ...blankInjury(), severity: 'simple' }]
+    return c
+  }
+  it('heals up to max HP, logs only what came back, and clears the started flag at full health', async () => {
+    const { healHp } = await import('../model/injuries')
+    const c = await hurt()
+    const max = derived(c).maxHp
+    const p = healHp(c, 3, 'Rest', 'Day 1')
+    expect(p.hp?.current).toBe(8)
+    expect(p.healingLog?.[0]).toMatchObject({ hp: 3, source: 'Rest', when: 'Day 1' })
+    expect(p.healingStarted).toBe(true)
+    const top = healHp(c, 999, 'Potion', '')
+    expect([top.hp?.current, top.healingLog?.[0].hp, top.healingStarted]).toEqual([max, max - 5, false])
+    expect(healHp({ ...c, hp: { ...c.hp, current: max } }, 3, 'Rest', '')).toEqual({})
+  })
+  it('Healing Rest restores full HP and heals treated wounds only', async () => {
+    const { healingRest } = await import('../model/injuries')
+    const c = await hurt()
+    const p = healingRest(c, '')
+    expect(p.hp?.current).toBe(derived(c).maxHp)
+    expect(p.crits?.map((w) => !!w.healed)).toEqual([true, false])
+  })
+  it('treated effect replaces the effect once treated; Deadly wounds have no countdown', async () => {
+    const { blankInjury, canCountDown, currentEffect, healReady } = await import('../model/injuries')
+    const w = { ...blankInjury(), effect: '-2 REF', treatedEffect: '-1 REF' }
+    expect(currentEffect(w)).toBe('-2 REF')
+    expect(currentEffect({ ...w, treated: true })).toBe('-1 REF')
+    expect(currentEffect({ ...w, treated: true, treatedEffect: '' })).toBe('-2 REF')
+    expect(healReady({ ...w, healNeeded: 3, healDone: 2 })).toBe(false)
+    expect(healReady({ ...w, healNeeded: 3, healDone: 3 })).toBe(true)
+    expect(canCountDown({ ...w, severity: 'deadly' })).toBe(false)
+    expect(healReady({ ...w, severity: 'deadly', healNeeded: 1, healDone: 1 })).toBe(false)
+  })
+})

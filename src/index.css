@@ -450,6 +450,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .history-list li { display: flex; gap: 10px; align-items: baseline; }
 .history-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .history-text > .hint { display: inline; }
+.injury-now { margin: 0; font-size: 0.9rem; }
+.injury-now .field-label { display: inline; margin-right: 6px; }
+.healing-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.healing-hp strong { font-family: var(--font-num); font-size: 1.4rem; }
+.healing-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; align-items: end; }
+.heal-tracker { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.heal-count { display: flex; gap: 6px; }
+.heal-count input { min-width: 0; width: 100%; }
+.heal-bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.heal-bar span { display: block; height: 100%; background: var(--steel); }
+.heal-pill { font-family: var(--font-num); font-weight: 700; color: var(--steel); min-width: 2.5em; }
 .injury-effect { font-size: 0.85rem; color: var(--muted); }
 .sev-pill {
   flex: none; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;

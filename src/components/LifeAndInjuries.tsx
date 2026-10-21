@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { uid } from '../model/factory'
-import { activeInjuries, blankInjury, cap, SEVERITIES } from '../model/injuries'
+import { derived } from '../model/combat'
+import { activeInjuries, blankInjury, canCountDown, cap, currentEffect, healHp, healingRest, healReady, SEVERITIES } from '../model/injuries'
 import {
   LIFE_EVENT_KINDS,
   type Character,
@@ -10,7 +11,7 @@ import {
   type LifeEventKind,
 } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
-import { ConfirmButton, TextArea, TextField } from './fields'
+import { ConfirmButton, NumberField, NumberInput, TextArea, TextField } from './fields'
 
 type Setter = (patch: Partial<Character>) => void
 
@@ -18,6 +19,7 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
   const active = activeInjuries(c)
   const healed = c.crits.filter((w) => w.healed)
   const untreated = active.filter((w) => !w.treated).length
+  const deadlyHealed = healed.some((w) => w.severity === 'deadly')
   const upd = (id: string, patch: Partial<CriticalWound>) =>
     set({ crits: c.crits.map((w) => (w.id === id ? { ...w, ...patch } : w)) })
   const remove = (id: string) => set({ crits: c.crits.filter((w) => w.id !== id) })
@@ -30,7 +32,7 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
           <strong>{active.length}</strong>
         </div>
         <div className={'summary-num' + (untreated ? ' summary-alert' : '')}>
-          <span className="field-label">Not stabilized</span>
+          <span className="field-label">Not treated</span>
           <strong>{untreated}</strong>
         </div>
         <div className="summary-num">
@@ -41,6 +43,8 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
           Add injury
         </button>
       </section>
+
+      <Healing c={c} set={set} />
 
       {active.length === 0 ? (
         <p className="hint">No active injuries. Critical wounds logged in an encounter show up here after you save wounds to sheets.</p>
@@ -66,14 +70,31 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
               </div>
               <TextField label="Injury" value={w.description} onChange={(v) => upd(w.id, { description: v })} placeholder="e.g. Cracked ribs" />
               <TextField label="Effect" value={w.effect ?? ''} onChange={(v) => upd(w.id, { effect: v })} placeholder="Penalty from the critical table" />
+              <TextField
+                label="Effect once treated"
+                value={w.treatedEffect ?? ''}
+                onChange={(v) => upd(w.id, { treatedEffect: v })}
+                placeholder="The table's treated effect, if different"
+              />
               <TextField label="When" value={w.when ?? ''} onChange={(v) => upd(w.id, { when: v })} placeholder="e.g. Session 4" />
+              {currentEffect(w) && (
+                <p className="injury-now">
+                  <span className="field-label">In effect now</span> {currentEffect(w)}
+                </p>
+              )}
+              {w.treated && canCountDown(w) && <HealTracker w={w} upd={(patch) => upd(w.id, patch)} />}
+              {w.severity === 'deadly' && (
+                <p className="hint">
+                  Deadly wounds aren't on the Critical Healing table, and their permanent penalties stay even after Healing Rest (errata p. 103, 174).
+                </p>
+              )}
               <div className="injury-actions">
                 <label className="check">
                   <input type="checkbox" checked={w.treated} onChange={(e) => upd(w.id, { treated: e.target.checked })} />
-                  Stabilized
+                  Treated
                 </label>
                 <span className="toolbar-spacer" />
-                <button type="button" className="btn" onClick={() => upd(w.id, { healed: true })}>
+                <button type="button" className={'btn' + (healReady(w) ? ' btn-primary' : '')} onClick={() => upd(w.id, { healed: true })}>
                   Mark healed
                 </button>
                 <ConfirmButton label="Delete" confirmLabel="Delete" onConfirm={() => remove(w.id)} />
@@ -92,6 +113,7 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
                 <span className={'sev-pill sev-' + w.severity}>{cap(w.severity)}</span>
                 <span className="history-text">
                   {w.description || 'Unnamed injury'} <span className="hint">· {HIT_LOCATION_NAMES[w.location]}{w.when ? ` · ${w.when}` : ''}</span>
+                  {w.severity === 'deadly' && w.treatedEffect && <span className="injury-effect">Permanent: {w.treatedEffect}</span>}
                 </span>
                 <button type="button" className="btn-chip" onClick={() => upd(w.id, { healed: false })}>
                   Reopen
@@ -99,8 +121,118 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
               </li>
             ))}
           </ul>
+          {deadlyHealed && <p className="hint">Deadly wounds keep their permanent penalties after healing.</p>}
         </section>
       )}
+    </div>
+  )
+}
+
+// HP healing and a record of it. Healing over time only starts after a DC:14 Healing Hands or First Aid
+// check (errata p. 173); how much comes back each day is in the core book, so the player enters it.
+function Healing({ c, set }: { c: Character; set: Setter }) {
+  const max = derived(c).maxHp
+  const [amount, setAmount] = useState(1)
+  const [source, setSource] = useState('Rest')
+  const [when, setWhen] = useState('')
+  const log = c.healingLog ?? []
+  const full = c.hp.current >= max
+  return (
+    <section className="panel stack">
+      <div className="healing-head">
+        <h2 className="panel-title">Healing</h2>
+        <span className="healing-hp">
+          HP <strong>{c.hp.current}</strong> / {max}
+        </span>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={!!c.healingStarted} disabled={full} onChange={(e) => set({ healingStarted: e.target.checked })} />
+        Healing started (someone passed a DC:14 Healing Hands or First Aid check)
+      </label>
+      <div className="healing-form">
+        <NumberField label="HP" value={amount} min={1} onChange={setAmount} />
+        <TextField label="From" value={source} onChange={setSource} list="heal-sources" />
+        <TextField label="When" value={when} onChange={setWhen} placeholder="e.g. Day 3" />
+        <datalist id="heal-sources">
+          <option value="Rest" />
+          <option value="Healing Hands" />
+          <option value="Potion" />
+          <option value="Magic Healing" />
+        </datalist>
+        <button type="button" className="btn btn-primary" disabled={full} onClick={() => set(healHp(c, amount, source.trim() || 'Healing', when.trim()))}>
+          Heal
+        </button>
+      </div>
+      <div className="injury-actions">
+        <button type="button" className="btn" disabled={full} onClick={() => set(healHp(c, 3, 'Magic Healing', when.trim()))} title="Errata p. 103: 3 HP per turn">
+          Magic Healing turn +3 HP
+        </button>
+        <ConfirmButton
+          label="Healing Rest"
+          confirmLabel="Heal fully and heal treated wounds"
+          onConfirm={() => set(healingRest(c, when.trim()))}
+        />
+      </div>
+      {!c.healingStarted && !full && <p className="hint">Rest won't bring HP back until the healing process has been started.</p>}
+      <p className="hint">
+        Healing Rest restores full HP and heals every treated critical wound (errata p. 103). Daily healing amounts are in the core book.
+      </p>
+      {log.length > 0 && (
+        <ul className="history-list">
+          {[...log].reverse().map((h) => (
+            <li key={h.id}>
+              <span className="heal-pill">+{h.hp}</span>
+              <span className="history-text">
+                {h.source} {h.when && <span className="hint">· {h.when}</span>}
+              </span>
+              <button type="button" className="btn-chip" onClick={() => set({ healingLog: log.filter((x) => x.id !== h.id) })}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// Counts Healing Hands rounds or successful Healing spells toward the number the wound needs.
+function HealTracker({ w, upd }: { w: CriticalWound; upd: (patch: Partial<CriticalWound>) => void }) {
+  const by = w.healBy ?? 'doctor'
+  const needed = w.healNeeded ?? 0
+  const done = w.healDone ?? 0
+  const unit = by === 'doctor' ? 'Healing Hands rounds' : 'Healing spells that beat the DC'
+  return (
+    <div className="heal-tracker">
+      <div className="healing-form">
+        <label className="field">
+          <span className="field-label">Healed by</span>
+          <select value={by} onChange={(e) => upd({ healBy: e.target.value as 'doctor' | 'mage' })}>
+            <option value="doctor">Doctor</option>
+            <option value="mage">Mage</option>
+          </select>
+        </label>
+        <NumberField label="Needed" value={needed} min={0} onChange={(v) => upd({ healNeeded: v })} />
+        <label className="field">
+          <span className="field-label">Done</span>
+          <span className="heal-count">
+            <NumberInput ariaLabel={`${unit} done`} value={done} min={0} onChange={(v) => upd({ healDone: v })} />
+            <button type="button" className="btn" onClick={() => upd({ healDone: done + 1 })}>
+              +1
+            </button>
+          </span>
+        </label>
+      </div>
+      {needed > 0 && (
+        <div className="heal-bar" role="progressbar" aria-valuemin={0} aria-valuemax={needed} aria-valuenow={Math.min(done, needed)} aria-label="Healing progress">
+          <span style={{ width: `${Math.min(100, (done / needed) * 100)}%` }} />
+        </div>
+      )}
+      <p className="hint">
+        {healReady(w)
+          ? 'Done: mark the wound healed once the last roll beats its DC.'
+          : `${unit}. Take the number and DC for this severity from the ${by === 'doctor' ? 'Healing Hands' : 'Healing Spell'} table in your book (errata p. 173).`}
+      </p>
     </div>
   )
 }

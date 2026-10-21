@@ -35,6 +35,11 @@ core book is marked UNVERIFIED in the code and "unverified" in the app.
   stat blocks. Leap = Run / 5, Run = SPD x 3, Enc = BODY x 10. HP = STA = 5 x base is unverified.
 - Saves: roll 1d10 under the Save (Stun) value; equal or higher fails. Death State starts at 0 HP.
 - Recovery: the Recover action gives REC Stamina. Resting and healing are left to the core book.
+- Healing (Injuries tab): healing over time starts after a DC:14 Healing Hands or First Aid check;
+  the player enters HP healed and it's logged. Magic Healing gives 3 HP a turn; Healing Rest gives full
+  HP and heals treated critical wounds. Critical wounds track their treated effect and count Healing
+  Hands rounds or Healing spells toward the number the book's table gives. Deadly wounds can't be counted down
+  (errata p. 103, 173-174).
 - Magic: casting spends Stamina; going over the Vigor Threshold in a round is flagged as overexertion.
 - Damage in the tracker: (damage - SP) x location (head x3, torso x1, limbs x1/2, unverified), then
   halved if resistant or doubled if susceptible, and armor loses 1 SP when damage gets through.

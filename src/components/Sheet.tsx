@@ -15,7 +15,7 @@ import {
   slug,
   type StatKey,
 } from '../rules/rules'
-import { activeInjuries, cap } from '../model/injuries'
+import { activeInjuries, cap, currentEffect } from '../model/injuries'
 import { addToCharacter, ARMOR, COVER_NAMES, type ArmorCover, type CatalogEntry } from '../model/catalog'
 import { CatalogSearch } from './CatalogSearch'
 import { Injuries, LifeEvents } from './LifeAndInjuries'
@@ -542,8 +542,8 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
               <li key={w.id}>
                 <span className={'sev-pill sev-' + w.severity}>{cap(w.severity)}</span>
                 <span className="history-text">
-                  {w.description || 'Unnamed injury'} <span className="hint">· {HIT_LOCATION_NAMES[w.location]}{w.treated ? ' · stabilized' : ''}</span>
-                  {w.effect && <span className="injury-effect">{w.effect}</span>}
+                  {w.description || 'Unnamed injury'} <span className="hint">· {HIT_LOCATION_NAMES[w.location]}{w.treated ? ' · treated' : ''}</span>
+                  {currentEffect(w) && <span className="injury-effect">{currentEffect(w)}</span>}
                 </span>
               </li>
             ))}
