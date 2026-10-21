@@ -202,7 +202,7 @@ export const PROFESSION_GEAR: Record<string, ProfessionGear> = {
   },
   Doctor: {
     pick: 5,
-    options: [o('Blanket'), o('Candles (x5)', 10), o('Clotting Powder', 10), o('Dagger'), o('Hourglass'), o('Tent, Large'), o('Numbing Herbs', 10), o('Sterilizing Fluid', 10), o("Surgeon's Kit"), o('Writing Kit')],
+    options: [o('Blanket'), o('Candles (x5)', 2), o('Clotting Powder', 10), o('Dagger'), o('Hourglass'), o('Tent, Large'), o('Numbing Herbs', 10), o('Sterilizing Fluid', 10), o("Surgeon's Kit"), o('Writing Kit')],
   },
   Mage: {
     pick: 5,
@@ -229,7 +229,8 @@ export const PROFESSION_GEAR: Record<string, ProfessionGear> = {
 }
 
 // The crossbows in the gear lists come with 20 bolts (core p. 43-44).
-export const GEAR_EXTRAS: Record<string, GearOption> = { Crossbow: o('Bolts (x10)', 20) }
+// Packs: the book's "bolts x20" (p. 43-44) is two Bolts (x10), "candles x10" (p. 41) two Candles (x5).
+export const GEAR_EXTRAS: Record<string, GearOption> = { Crossbow: o('Bolts (x10)', 2) }
 
 // Starting-gear items are tagged in their notes so the creator can find and untick them.
 export const STARTING_GEAR_NOTE = 'Starting gear'
