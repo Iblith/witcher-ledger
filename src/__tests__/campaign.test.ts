@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyCampaignUpdate, campaignNpcs, CAMPAIGN_IDS } from '../model/campaign'
+import { applyCampaignUpdate, campaignNpcs, CAMPAIGN_IDS, CAPTAIN_NAME, nameCaptain } from '../model/campaign'
 import { effectiveStat, toCombatant } from '../model/combat'
 import {
   duplicateEntry,
@@ -40,6 +40,13 @@ describe('campaign NPCs', () => {
       expect(cb.hp.current).toBe(cb.hp.max)
       expect(cb.attacks.length).toBeGreaterThan(0)
     }
+  })
+
+  it('names the Captain, including on lists seeded before he had a name', () => {
+    const cap = list.find((c) => c.id === 'campaign-captain')!
+    expect(cap.name).toBe(CAPTAIN_NAME)
+    expect(nameCaptain([{ ...cap, name: 'The Captain' }])[0].name).toBe(CAPTAIN_NAME)
+    expect(nameCaptain([{ ...cap, name: 'Ser Grim' }])[0].name).toBe('Ser Grim')
   })
 
   it('puts the Captain in full plate with a heavy longsword, EV counted once', () => {

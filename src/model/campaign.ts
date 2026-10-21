@@ -9,6 +9,9 @@ import type { ArmorSlot, Character, Spell, Weapon } from './types'
 // from any book: every number is an UNVERIFIED estimate for play, and each sheet says so. Weapon
 // and armor numbers follow the app's item catalog where a catalog item fits (also unverified).
 
+// Named on 2026-10-21; GMs seeded before that have him as "The Captain".
+export const CAPTAIN_NAME = 'Captain Darvel aep Moriann'
+
 const UNVERIFIED = 'Original stat block made for this campaign. Every number is an estimate (unverified), not from a book.'
 
 function stats(s: string): Stats {
@@ -114,7 +117,7 @@ function captain(): Character {
   const plate: HitLocation[] = ['torso', ...ARMS, ...LEGS]
   return npc(
     id,
-    'The Captain',
+    CAPTAIN_NAME,
     'Man-At-Arms',
     {
       race: 'Human',
@@ -169,7 +172,7 @@ function captain(): Character {
         'Devastating cut: when a longsword attack beats the defense by 5 or more, add 2d6 damage.\nRally (his action): every deserter who can hear him shakes off Staggered and regains 5 STA.\nHold the line: while he stands, his men do not rout.\nFull plate: the sheet already applies the EV (REF and DEX shown 3 lower).',
       background:
         "Commander of a company that deserted after a lost battle; prices on all their heads. Kerrow hides them in return for muscle, and the Lamplighter's gate moved them out of the Saltcellar. Tired, fair and honest about what his men are. He refuses to have a prisoner quietly drowned. One of his men dropped a Nilfgaardian-style gauntlet in the ritual chamber.",
-      notes: `The Lamplighter's captain · Threat: Hard (Deadly with 6–8 deserters)\n\n${UNVERIFIED}\n\nUnnamed in the campaign notes: rename him here. He is a soldier, not a fanatic: with the Order's ledger in hand the party can talk him down (Persuasion DC 18). If not, he fights in the cellar with his deserters, front and centre, cutting at whoever hurt his men last.`,
+      notes: `The Lamplighter's captain · Threat: Hard (Deadly with 6–8 deserters)\n\n${UNVERIFIED}\n\nNamed by Jacob's ask on 2026-10-21. He is a soldier, not a fanatic: with the Order's ledger in hand the party can talk him down (Persuasion DC 18). If not, he fights in the cellar with his deserters, front and centre, cutting at whoever hurt his men last.`,
     },
     60,
     50,
@@ -203,6 +206,10 @@ function deserter(): Character {
     null,
     null,
   )
+}
+
+export function nameCaptain(characters: Character[]): Character[] {
+  return characters.map((c) => (c.id === 'campaign-captain' && c.name === 'The Captain' ? { ...c, name: CAPTAIN_NAME } : c))
 }
 
 export const CAMPAIGN_IDS = ['campaign-lamplighter', 'campaign-captain', 'campaign-deserter']

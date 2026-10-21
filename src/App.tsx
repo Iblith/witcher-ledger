@@ -10,7 +10,7 @@ import { ConfirmButton } from './components/fields'
 import { applyJournalUpdate, missingBestiary } from './model/bestiary'
 import { JOURNAL_TITLE } from './model/journalBestiary'
 import { missingNpcPack } from './model/npcPack'
-import { applyCampaignUpdate } from './model/campaign'
+import { applyCampaignUpdate, nameCaptain } from './model/campaign'
 import { derived } from './model/combat'
 import { currentEntry, isNameOnlySheet, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
 import { newCharacter, newPlayer, sampleCharacters, uid } from './model/factory'
@@ -54,7 +54,7 @@ function initialCharacters(): Character[] {
   // Names typed into the tracker's old party list become players on the Players tab.
   const known = new Set(withCampaign.filter((c) => c.kind === 'pc').map((c) => c.name.trim().toLowerCase()))
   const legacy = takeLegacyPartyNames().filter((n) => !known.has(n.toLowerCase()))
-  return [...withCampaign, ...legacy.map((n) => newPlayer(n, 'Human', ''))]
+  return nameCaptain([...withCampaign, ...legacy.map((n) => newPlayer(n, 'Human', ''))])
 }
 
 export default function App() {
@@ -214,7 +214,7 @@ export default function App() {
           })}
           {visible.length === 0 && (
             <li className="hint">
-              {IS_GM && mode === 'players' ? 'No players yet. Add each one above with a name, race and profession. If a player keeps their own sheet in the Player version, they can tap Send to GM and you import it.' : 'No characters here yet.'}
+              {IS_GM && mode === 'players' ? 'No players yet. Add each one above with a name, race and profession.' : 'No characters here yet.'}
             </li>
           )}
         </ul>
@@ -242,9 +242,11 @@ export default function App() {
               </button>
             </>
           )}
-          <button type="button" className="btn" onClick={() => setTransfer({ mode: 'import' })}>
-            {IS_GM ? 'Import sheets' : 'Import'}
-          </button>
+          {!IS_GM && (
+            <button type="button" className="btn" onClick={() => setTransfer({ mode: 'import' })}>
+              Import
+            </button>
+          )}
           <button type="button" className="btn" onClick={() => setTransfer({ mode: 'export', ids: characters.map((c) => c.id) })}>
             {IS_GM ? 'Export all' : 'Back up all'}
           </button>
