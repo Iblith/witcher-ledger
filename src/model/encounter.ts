@@ -63,26 +63,26 @@ export const CONDITIONS = [
   'Hallucinating',
 ] as const
 
-// What each condition does, shown on hover. From Easy Mode p. 20 and the errata where noted;
-// the last three are core rulebook conditions the project has no text for.
+// What each condition does, shown on hover. Only the errata's wording is used; the rest are core
+// rulebook conditions the project has no text for.
+const SEE_BOOK = 'Core rulebook condition; see your book.'
 export const CONDITION_HELP: Record<(typeof CONDITIONS)[number], string> = {
-  Bleeding: '2 HP damage at the start of each of their turns until a DC:15 First Aid check (an action) stops it.',
-  Poisoned: '3 lethal damage at the start of each turn, armor does not help. Ends with DC:15 First Aid or DC:15 Endurance (an action).',
-  Burning: '5 damage to every location at the start of each turn; armor reduces it but loses 1 SP a turn. A full turn rolling or in water puts it out.',
-  Frozen: '-3 SPD and -1 REF. Breaking free is a DC:16 Physique check (an action).',
+  Bleeding: SEE_BOOK,
+  Poisoned: SEE_BOOK,
+  Burning: SEE_BOOK,
+  Frozen: SEE_BOOK,
   Staggered: '-2 to attack and defense until the start of their next turn (errata p. 161).',
-  Stunned: "Can't move or take any action, defense included. Ends if they spend a full turn on a Stun save (roll under Stun) or are hit by an attack.",
-  Prone: '-3 to attack and defense. Standing costs their movement, or someone else’s action to help them up.',
-  Blinded: '-3 to attack and defense, -5 to Awareness.',
-  Unconscious: "Prone, can't move or act, defense included. Ends when stabilized (DC:10 First Aid), and their Stamina goes to 1.",
-  Grappled: 'Core rulebook condition; see your book.',
-  Intoxicated: 'Core rulebook condition; see your book.',
-  Hallucinating: 'Core rulebook condition; see your book.',
+  Stunned: 'Out of Stamina means stunned: they cannot do anything but recover. A Stun save rolls under Stun (errata p. 47-48). Other effects: see your book.',
+  Prone: SEE_BOOK,
+  Blinded: SEE_BOOK,
+  Unconscious: 'Non-lethal damage equal to their Stamina knocks them out; treated as stunned until they recover 20 Stamina and pass a Stun save (errata p. 153).',
+  Grappled: SEE_BOOK,
+  Intoxicated: SEE_BOOK,
+  Hallucinating: SEE_BOOK,
 }
 
-// Damage multipliers for where a blow lands (humanoid hit locations). Head ×3, torso ×1 and legs ×½
-// match Easy Mode; arms at ×½ and the six-location roll table below are UNVERIFIED core-book memory
-// (Easy Mode folds the arms into an upper body at ×1).
+// Damage multipliers for where a blow lands (humanoid hit locations). The multipliers and the
+// six-location roll table below are UNVERIFIED core-book memory.
 export const LOCATION_MULTIPLIER: Record<HitLocation, number> = {
   head: 3,
   torso: 1,
@@ -247,7 +247,7 @@ export interface DamageInput {
   location: HitLocation
   ignoreArmor: boolean
   resistant: boolean
-  // Susceptible to this attack type: double damage after armor (Easy Mode p. 18).
+  // Susceptible to this attack type: double damage (A Witcher's Journal p. 13).
   vulnerable?: boolean
 }
 
@@ -259,13 +259,13 @@ export interface DamageResult {
 }
 
 // Armor stops damage up to its SP. Whatever gets through is multiplied by the hit location (rounded
-// down, minimum 1), then halved for resistance or doubled for susceptibility, and the armor there
-// loses 1 SP. Damage that doesn't beat SP does nothing. (Easy Mode p. 18; errata p. 154-155.)
+// down), then halved for resistance (errata p. 154) or doubled for susceptibility (Journal p. 13), and
+// the armor there loses 1 SP. Damage that doesn't beat SP does nothing.
 export function applyDamage(x: EncounterEntry, d: DamageInput): DamageResult {
   const armorSp = d.ignoreArmor ? 0 : x.sp[d.location]
   const sp = d.ignoreArmor ? 0 : armorSp + (x.toughSp ?? 0)
   const through = Math.max(0, d.amount - sp)
-  let hpLoss = through > 0 ? Math.max(1, Math.floor(through * LOCATION_MULTIPLIER[d.location])) : 0
+  let hpLoss = Math.floor(through * LOCATION_MULTIPLIER[d.location])
   if (d.resistant && !d.vulnerable) hpLoss = Math.floor(hpLoss / 2)
   if (d.vulnerable && !d.resistant) hpLoss *= 2
   const ablated = through > 0 && !d.ignoreArmor && armorSp > 0
@@ -284,7 +284,7 @@ export function applyDamage(x: EncounterEntry, d: DamageInput): DamageResult {
 
 export type EntryState = 'ok' | 'wounded' | 'dying' | 'defeated'
 
-// 0 HP or less is the Death State / Dying (Easy Mode p. 18-20, errata p. 153).
+// 0 HP or less is the Death State (errata p. 153).
 export function entryState(x: EncounterEntry): EntryState {
   if (x.defeated) return 'defeated'
   if (x.hp.current <= 0) return 'dying'
@@ -298,7 +298,7 @@ export function recoverStamina(x: EncounterEntry): EncounterEntry {
   return { ...x, sta: { ...x.sta, current: Math.min(x.sta.max, x.sta.current + rec) } }
 }
 
-// Extra action costs 3 STA; each defense after the first in a round costs 1 (Easy Mode p. 16).
+// Extra action costs 3 STA; each defense after the first in a round costs 1 (errata p. 151).
 export function spendStamina(x: EncounterEntry, amount: number): EncounterEntry {
   return { ...x, sta: { ...x.sta, current: x.sta.current - amount } }
 }

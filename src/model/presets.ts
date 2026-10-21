@@ -1,10 +1,10 @@
 import { slug } from '../rules/rules'
 
 // Presets for the guided creator so players pick instead of typing.
-// The project has the core v4 errata and the Easy Mode quickstart, not the core rulebook.
-// Racial perks are sourced (see RACE_PERKS). Homelands, schools, profession skill lists and
-// starting gear are from memory of the core book and UNVERIFIED: check them against the book.
-// Everything stays editable in the creator.
+// The project only has the v4 errata, not the core rulebook. Anything marked
+// `fromErrata` is confirmed there; the rest (perk text, homelands, schools, profession
+// skill lists, starting gear) is UNVERIFIED memory of the core book and should be
+// checked against it. Everything stays editable in the creator.
 
 export const LANGUAGE_SKILLS = {
   common: 'language-common-speech',
@@ -55,37 +55,30 @@ export const WITCHER_SCHOOLS = ['Wolf', 'Cat', 'Griffin', 'Viper', 'Bear', 'Mant
 export interface RacePerk {
   name: string
   text: string
-  // Where the text comes from. Missing: from memory of the core book, unverified.
-  source?: 'errata' | 'easy-mode'
+  fromErrata?: boolean
 }
 
-// Human, elf, dwarf and witcher perks as printed on the Easy Mode pregenerated characters, except
-// Dwarf Tough, which follows the core errata (p. 23) because Easy Mode simplifies it.
 export const RACE_PERKS: Record<string, RacePerk[]> = {
   Human: [
-    { name: 'Trustworthy', text: 'Mild (+1) bonus to Charisma, Seduction and Persuasion checks against other humans.', source: 'easy-mode' },
-    { name: 'Ingenuity', text: '+1 to Deduction.', source: 'easy-mode' },
-    {
-      name: 'Blindly Stubborn',
-      text: 'Up to 3 times a session, re-roll a failed Resist Coercion or Courage check and take the higher roll.',
-      source: 'easy-mode',
-    },
+    { name: 'Trustworthy', text: 'People tend to trust humans; bonus to social skills with other humans.' },
+    { name: 'Ingenuity', text: '+1 to Deduction.' },
+    { name: 'Blindly Stubborn', text: 'Hard to talk out of a course of action once set on it.' },
   ],
   Elf: [
-    { name: 'Artistic', text: '+1 to Fine Arts.', source: 'easy-mode' },
-    { name: 'Marksman', text: '+2 to Archery (can raise it above the starting cap); draw and string a bow without taking an action.', source: 'easy-mode' },
-    { name: 'Natural Attunement', text: 'Animals are not disturbed by elves: beasts treat them as friendly and will not attack unless provoked.', source: 'easy-mode' },
+    { name: 'Artistic', text: '+1 to Fine Arts.' },
+    { name: 'Marksman', text: '+2 to Archery; can raise it above the starting cap.', fromErrata: true },
+    { name: 'Natural Attunement', text: 'Beasts are not hostile unless provoked; finds plants and herbs easily.' },
   ],
   Dwarf: [
-    { name: 'Tough', text: '+2 SP to every location, on top of armor and never ablated.', source: 'errata' },
-    { name: 'Strong', text: '+1 to Physique.', source: 'easy-mode' },
-    { name: "Crafter's Eye", text: '+1 to Business; hard to bluff on appraisals.', source: 'easy-mode' },
+    { name: 'Tough', text: '+2 SP to every location, on top of armor and never ablated.', fromErrata: true },
+    { name: 'Strong', text: 'Extra Encumbrance.' },
+    { name: 'Crafty', text: '+1 to Business.' },
   ],
   Witcher: [
-    { name: 'Enhanced Senses', text: 'No penalties from dim light, +1 to Awareness, and can track by scent alone.', source: 'easy-mode' },
-    { name: 'Resilient Mutations', text: 'Immune to diseases and able to use mutagens.', source: 'easy-mode' },
-    { name: 'Lightning Reflexes', text: '+1 REF and +1 DEX, which can go above 10.', source: 'easy-mode' },
-    { name: 'Dulled Emotions', text: 'No Courage checks against Intimidation, but -4 EMP (not below 1).', source: 'easy-mode' },
+    { name: 'Enhanced Senses', text: 'No penalty in dim light; can track by scent.' },
+    { name: 'Resilient Mutation', text: 'Immune to disease, resistant to poison and toxicity.' },
+    { name: 'Lightning Reflexes', text: '+1 REF and +1 DEX, which can go above the usual maximum.' },
+    { name: 'Dulled Emotions', text: 'Emotions are muted, which makes most people uneasy.' },
   ],
 }
 
@@ -93,7 +86,7 @@ export function perksText(race: string): string {
   return (RACE_PERKS[race] ?? []).map((p) => `${p.name}: ${p.text}`).join('\n')
 }
 
-// UNVERIFIED (from memory of the core book). The ten skills each profession spends its 44 points on. "Language" is a second
+// The ten skills each profession spends its 44 points on. "Language" is a second
 // language beside the home one, swapped in when the profession is picked.
 export const PROFESSION_SKILLS: Record<string, string[]> = {
   Bard: ['Charisma', 'Deceit', 'Fine Arts', 'Human Perception', 'Language', 'Performance', 'Persuasion', 'Seduction', 'Social Etiquette', 'Streetwise'],
@@ -124,7 +117,7 @@ export function professionSkillIds(profession: string, homeland: string): string
   return (PROFESSION_SKILLS[profession] ?? []).map((n) => (n === 'Language' ? lang : slug(n)))
 }
 
-// UNVERIFIED (from memory of the core book). Each profession picks a number of these for free. Names match entries in the item catalog (catalog.ts).
+// Each profession picks a number of these for free. Names match entries in the item catalog (catalog.ts).
 export interface ProfessionGear {
   pick: number
   options: string[]

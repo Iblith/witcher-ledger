@@ -35,7 +35,7 @@ export function rollCheck(label: string, base: number, d10: D10 = rollD10): Chec
 }
 
 // Save Checks (Stun, Death) are a plain 1d10 with no exploding. The save succeeds only if the roll is
-// LESS than the Save value; equal or higher fails (Easy Mode p. 14, errata p. 47 "roll under").
+// LESS than the Save value; equal or higher fails (errata p. 47 "roll under").
 export function rollFlat(label: string, target = 0, d10: D10 = rollD10): CheckRoll {
   const r = d10()
   const save = target > 0 ? { target, passed: r < target } : undefined

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { armorEv, castSpell, checkBase, derived, carriedWeight, effectiveStat, recoverAction, restDay, restHour, staCostNumber } from '../model/combat'
+import { armorEv, castSpell, checkBase, derived, carriedWeight, effectiveStat, recoverAction, staCostNumber } from '../model/combat'
 import { applyProfession, uid } from '../model/factory'
 import type { Character, Item, Spell, SpellKind, Weapon } from '../model/types'
 import {
@@ -121,10 +121,6 @@ function SheetHeader({ c, set, onChange }: { c: Character; set: Setter; onChange
 
 function Recovery({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetProps['onRoll'] }) {
   const d = derived(c)
-  const [strenuous, setStrenuous] = useState(false)
-  const [treated, setTreated] = useState(false)
-  const [healingHands, setHealingHands] = useState(false)
-  const halfRec = Math.floor(d.rec / 2)
   return (
     <section className="panel">
       <h2 className="panel-title">Saves and recovery</h2>
@@ -136,29 +132,7 @@ function Recovery({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           Recover action +{d.rec} STA
         </button>
       </div>
-      <div className="defense-row">
-        <label className="check">
-          <input type="checkbox" checked={strenuous} onChange={(e) => setStrenuous(e.target.checked)} />
-          Strenuous (halves recovery)
-        </label>
-        <button type="button" className="btn" onClick={() => set(restHour(c, strenuous))}>
-          Rest 1 hour +{strenuous ? halfRec : d.rec} STA
-        </button>
-      </div>
-      <div className="defense-row">
-        <label className="check">
-          <input type="checkbox" checked={treated} onChange={(e) => setTreated(e.target.checked)} />
-          Treated (DC:10 First Aid)
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={healingHands} onChange={(e) => setHealingHands(e.target.checked)} />
-          By a Doctor's Healing Hands
-        </label>
-        <button type="button" className="btn" disabled={!treated && !healingHands} onClick={() => set(restDay(c, strenuous, healingHands))}>
-          Rest 1 day +{(strenuous ? halfRec : d.rec) + (healingHands ? 3 : 0)} HP
-        </button>
-      </div>
-      <p className="hint">HP only comes back after the wounds are treated. Rules from Easy Mode p. 18 and the core errata.</p>
+      <p className="hint">Saves roll under the Save value (errata p. 47); the Recover action restores REC Stamina (errata p. 151). Resting and healing rules are in the core book.</p>
     </section>
   )
 }
@@ -178,7 +152,7 @@ function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           footer={
             c.hp.current <= 0 ? (
               <p className="pool-note">
-                Death state: stats at 1/3. Death save each turn: roll under {d.stun}, with −1 for each save after the first. Luck raises the
+                Death state: stats at 1/3. Death save each turn: roll under {d.stun}. Luck raises the
                 target.
               </p>
             ) : c.hp.current < d.woundThreshold ? (
@@ -314,7 +288,6 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
                   <SkillRow
                     key={s.id}
                     name={s.name}
-                    unverified={!s.sourced}
                     value={c.skills[s.id] ?? 0}
                     base={checkBase(c, s.id)}
                     onChange={(v) => setSkill(s.id, v)}
@@ -341,8 +314,7 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
         })}
       </div>
       <p className="hint">
-        Skills and their stats are checked against Easy Mode, except those tagged unverified. Easy Mode puts Alchemy under INT; this sheet
-        keeps CRA as remembered from the core book, so check yours.
+        The skill list and each skill's governing stat are from memory of the core book (unverified), so check them against yours.
       </p>
       <form
         className="panel add-row"
@@ -382,7 +354,6 @@ function SkillRow(props: {
   value: number
   base: number
   custom?: boolean
-  unverified?: boolean
   onChange: (v: number) => void
   onRoll: () => void
   onRemove?: () => void
@@ -392,11 +363,6 @@ function SkillRow(props: {
       <span className="skill-name">
         {props.name}
         {props.custom && <span className="tag">custom</span>}
-        {props.unverified && (
-          <span className="tag" title="Not in Easy Mode: the skill and its stat are from memory of the core book">
-            unverified
-          </span>
-        )}
       </span>
       <NumberInput ariaLabel={`${props.name} points`} value={props.value} min={0} max={20} onChange={props.onChange} className="skill-input" />
       <button type="button" className="roll-btn" onClick={props.onRoll} title={`Roll ${props.name}: ${props.base} + 1d10`}>
@@ -679,7 +645,7 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
     const r = castSpell(c, cost, spent)
     set(r.patch)
     setSpent(r.spent)
-    setLastCast(`${name}: −${cost} STA${r.hpLoss ? `, −${r.hpLoss} HP for going over the Vigor Threshold` : ''}`)
+    setLastCast(`${name}: −${cost} STA${r.overThreshold ? '. Over the Vigor Threshold: overexertion damage and an elemental fumble, see core p. 166' : ''}`)
     onRoll(`Cast ${name}`, castBase)
   }
   return (
@@ -700,7 +666,7 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
           <span>
             Spent on magic this round <strong>{spent}</strong> / {c.vigor}
           </span>
-          <NumberField label="Sign STA (1 to 7)" value={signSta} min={1} max={7} onChange={setSignSta} />
+          <NumberField label="Sign STA" value={signSta} min={1} onChange={setSignSta} />
           <button type="button" className="btn btn-quiet" onClick={() => {
               setSpent(0)
               setLastCast('')
@@ -710,8 +676,8 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
         </div>
         {lastCast && <p className="pool-note">{lastCast}</p>}
         <p className="hint">
-          Casting costs the spell's Stamina. Going over the Vigor Threshold in one round costs 5 HP per point over. Signs cost 1 to 7 Stamina,
-          your choice. (Easy Mode p. 21, errata p. 166.)
+          Casting costs the spell's Stamina. Spending past the Vigor Threshold in one round is overexertion: it deals damage and an
+          elemental fumble (errata, core p. 166). Sign Stamina is your choice; check the cost in your book.
         </p>
       </section>
       {c.spells.length === 0 && <p className="hint">No spells, signs or invocations yet.</p>}

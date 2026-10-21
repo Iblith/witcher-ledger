@@ -3,10 +3,10 @@ import { uid } from './factory'
 import type { Character, Item, Weapon } from './types'
 
 // The weapons, armor and gear players can add from a search instead of typing.
-// The project has the core v4 errata and the Easy Mode quickstart, not the core rulebook.
-// Names come from the book (many are listed in the errata's crafting and gear sections); the
-// numbers are UNVERIFIED recollection unless `errata` or `easyMode` says what a source confirms.
-// The search marks everything else as unverified. Everything is editable once it is on a sheet.
+// The project only has the v4 errata, not the core rulebook. Names come from the
+// book (many are listed in the errata's crafting and gear sections); the numbers
+// are UNVERIFIED recollection unless `errata` says what the errata confirms, and the
+// search marks them so. Everything is editable once it is on a sheet.
 
 export type ArmorCover = 'head' | 'torso' | 'legs'
 
@@ -15,8 +15,6 @@ interface Base {
   weight: number
   // What the v4 errata confirms about this entry, if anything.
   errata?: string
-  // What the Easy Mode pregenerated characters confirm about this entry, if anything.
-  easyMode?: string
 }
 
 export interface WeaponEntry extends Base {
@@ -58,7 +56,7 @@ const w = (
   o: Partial<Omit<WeaponEntry, 'kind' | 'name' | 'skillId' | 'damage'>> = {},
 ): WeaponEntry => ({ kind: 'weapon', name, skillId, damage, accuracy: 0, reliability: 10, hands: 1, range: '', effect: '', weight: 1, ...o })
 
-const a = (name: string, covers: ArmorCover, sp: number, ev: number, weight: number, errata?: string, easyMode?: string): ArmorEntry => ({
+const a = (name: string, covers: ArmorCover, sp: number, ev: number, weight: number, errata?: string): ArmorEntry => ({
   kind: 'armor',
   name,
   covers,
@@ -66,11 +64,7 @@ const a = (name: string, covers: ArmorCover, sp: number, ev: number, weight: num
   ev,
   weight,
   errata,
-  easyMode,
 })
-
-const TORSO = 'Torso armor also covers the arms'
-const EASY_SP = 'SP (pregen sheets)'
 
 const sh = (name: string, reliability: number, weight: number): ShieldEntry => ({ kind: 'shield', name, reliability, weight })
 
@@ -101,7 +95,7 @@ export const WEAPONS: WeaponEntry[] = [
   w('Dagger', 'small-blades', '1d6+2', { weight: 0.5 }),
   w('Hunting Knife', 'small-blades', '1d6+2', { weight: 0.5, effect: 'Bleeding (25%)' }),
   w('Stiletto', 'small-blades', '1d6+2', { weight: 0.5, effect: 'Armor Piercing' }),
-  w('Poniard', 'small-blades', '1d6+4', { accuracy: 1, weight: 0.5, effect: 'Armor Piercing, Balanced', easyMode: 'WA +1' }),
+  w('Poniard', 'small-blades', '1d6+4', { weight: 0.5, effect: 'Armor Piercing, Balanced' }),
   w('Jambiya', 'small-blades', '2d6', { accuracy: 1, weight: 0.5, effect: 'Bleeding (25%)' }),
   w('Throwing Knife', 'athletics', '1d6', { weight: 0.5, range: 'BODY×4 m', effect: 'Thrown' }),
   w('Orion', 'athletics', '1d6', { accuracy: 1, weight: 0.1, range: 'BODY×4 m', effect: 'Thrown', errata: 'WA +1, weight 0.1' }),
@@ -125,39 +119,35 @@ export const WEAPONS: WeaponEntry[] = [
   w('Halberd', 'staff-spear', '5d6+2', { reliability: 15, hands: 2, weight: 4, effect: 'Long Reach, Bleeding (25%)' }),
   w('Red Halberd', 'staff-spear', '6d6', { accuracy: 1, reliability: 20, hands: 2, weight: 4, effect: 'Long Reach, Bleeding (50%)' }),
   // Bows and crossbows
-  w('Short Bow', 'archery', '3d6+3', { hands: 2, weight: 1, range: '100 m', easyMode: 'Damage 3d6+3, range 100 m' }),
+  w('Short Bow', 'archery', '2d6+2', { hands: 2, weight: 1, range: '100 m' }),
   w('Long Bow', 'archery', '4d6', { hands: 2, weight: 1.5, range: '200 m' }),
   w('War Bow', 'archery', '5d6', { accuracy: 1, reliability: 15, hands: 2, weight: 1.5, range: '300 m' }),
   w('Elven Travel Bow', 'archery', '4d6', { accuracy: 2, hands: 2, weight: 1, range: '200 m' }),
   w('Elven Zefhar', 'archery', '5d6', { accuracy: 2, reliability: 15, hands: 2, weight: 1.5, range: '300 m', effect: 'Improved Armor Piercing' }),
-  w('Hand Crossbow', 'crossbow', '2d6+2', { accuracy: 1, weight: 1, range: '50 m', easyMode: 'WA +1, damage 2d6+2, range 50 m', errata: 'WA +1' }),
-  w('Crossbow', 'crossbow', '4d6+2', { accuracy: 1, hands: 2, weight: 2, range: '100 m', effect: 'Armor Piercing', easyMode: 'WA +1, damage 4d6+2, range 100 m' }),
+  w('Hand Crossbow', 'crossbow', '2d6', { weight: 1, range: '50 m' }),
+  w('Crossbow', 'crossbow', '4d6', { hands: 2, weight: 2, range: '100 m', effect: 'Armor Piercing' }),
   w("Monster Hunter's Crossbow", 'crossbow', '4d6+2', { accuracy: 1, reliability: 15, hands: 2, weight: 2, range: '150 m', effect: 'Armor Piercing' }),
 ]
 
 export const ARMOR: ArmorEntry[] = [
-  a("Verden Archer's Hood", 'head', 3, 0, 0.5, undefined, EASY_SP),
   a('Double Woven Hood', 'head', 5, 0, 0.5),
-  a('Chain Coif', 'head', 12, 0, 1, undefined, EASY_SP),
   a('Armored Hood', 'head', 8, 0, 1),
   a('Temerian Armet', 'head', 14, 1, 2),
   a('Great Helm', 'head', 20, 1, 3),
   a('Nilfgaardian Helm', 'head', 20, 1, 3),
-  a('Gambeson', 'torso', 3, 0, 2, TORSO, 'SP 3 (pregen sheets)'),
-  a('Aedirnian Gambeson', 'torso', 5, 0, 2, TORSO, EASY_SP),
-  a('Double Woven Gambeson', 'torso', 8, 0, 3, TORSO, 'SP 8 (pregen sheets)'),
-  a('Lyrian Leather Jacket', 'torso', 8, 0, 3, TORSO),
-  a('Brigandine', 'torso', 12, 1, 5, TORSO, 'SP 12 (pregen sheets)'),
-  a("Redanian Halberdier's Armor", 'torso', 15, 1, 6, TORSO),
-  a('Scoia’tael Armor', 'torso', 14, 0, 4, TORSO),
-  a('Hindarsfjall Heavy Armor', 'torso', 20, 2, 8, TORSO),
-  a('Plate Armor', 'torso', 20, 2, 10, TORSO),
-  a('Gnomish Dragoon Armor', 'torso', 20, 1, 7, TORSO),
-  a('Nilfgaardian Plate Armor', 'torso', 25, 3, 11, TORSO),
-  a('Padded Trousers', 'legs', 5, 0, 1.5, undefined, 'SP 5 (pregen sheets)'),
-  a('Cavalry Trousers', 'legs', 3, 0, 1.5, undefined, EASY_SP),
+  a('Gambeson', 'torso', 3, 0, 2, 'Torso armor also covers the arms'),
+  a('Double Woven Gambeson', 'torso', 8, 0, 3, 'Torso armor also covers the arms'),
+  a('Lyrian Leather Jacket', 'torso', 8, 0, 3, 'Torso armor also covers the arms'),
+  a('Brigandine', 'torso', 12, 1, 5, 'Torso armor also covers the arms'),
+  a("Redanian Halberdier's Armor", 'torso', 15, 1, 6, 'Torso armor also covers the arms'),
+  a('Scoia’tael Armor', 'torso', 14, 0, 4, 'Torso armor also covers the arms'),
+  a('Hindarsfjall Heavy Armor', 'torso', 20, 2, 8, 'Torso armor also covers the arms'),
+  a('Plate Armor', 'torso', 20, 2, 10, 'Torso armor also covers the arms'),
+  a('Gnomish Dragoon Armor', 'torso', 20, 1, 7, 'Torso armor also covers the arms'),
+  a('Nilfgaardian Plate Armor', 'torso', 25, 3, 11, 'Torso armor also covers the arms'),
+  a('Padded Trousers', 'legs', 3, 0, 1.5),
   a('Lyrian Leather Trousers', 'legs', 8, 0, 2),
-  a('Armored Trousers', 'legs', 12, 1, 3, undefined, 'SP 12 (pregen sheets)'),
+  a('Armored Trousers', 'legs', 12, 1, 3),
   a('Redanian Greaves', 'legs', 12, 1, 3),
   a('Hindarsfjall Heavy Chausses', 'legs', 20, 2, 5),
   a('Plate Greaves', 'legs', 20, 2, 6),
@@ -277,10 +267,9 @@ const COVERED: Record<ArmorCover, HitLocation[]> = {
 
 export const COVER_NAMES: Record<ArmorCover, string> = { head: 'Head', torso: 'Torso and arms', legs: 'Legs' }
 
-// What a source confirms about an entry, or null if its numbers are unverified recollection.
+// What the errata confirms about an entry, or null if its numbers are unverified recollection.
 export function sourceNote(e: CatalogEntry): string | null {
-  const confirmed = [e.easyMode && `Easy Mode: ${e.easyMode}`, e.errata && `errata: ${e.errata}`].filter(Boolean)
-  return confirmed.length ? `Confirmed by ${confirmed.join('; ')}. Anything else is unverified.` : null
+  return e.errata ? `Confirmed by the errata: ${e.errata}. Anything else is unverified.` : null
 }
 
 export function describe(e: CatalogEntry): string {

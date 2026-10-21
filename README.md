@@ -27,17 +27,16 @@ Build output:
 
 ## Rules notes
 
-The rules sources on hand are the core v4 errata, the Easy Mode quickstart and A Witcher's Journal;
-there is no copy of the core rulebook. Code comments say which source settles each rule, and
-anything from memory of the core book is marked UNVERIFIED in the code and "unverified" in the app.
+The rules sources on hand are the core v4 errata and A Witcher's Journal; there is no copy of the
+core rulebook. Code comments say which source settles each rule, and anything from memory of the
+core book is marked UNVERIFIED in the code and "unverified" in the app.
 
-- Derived stats: (BODY + WILL) / 2 drives HP, STA, REC and Stun (capped at 10), checked against the
-  Easy Mode pregens and Journal stat blocks. Leap = Run / 5, Run = SPD x 3, Enc = BODY x 10.
+- Derived stats: (BODY + WILL) / 2 drives REC and Stun (capped at 10), checked against the Journal
+  stat blocks. Leap = Run / 5, Run = SPD x 3, Enc = BODY x 10. HP = STA = 5 x base is unverified.
 - Saves: roll 1d10 under the Save (Stun) value; equal or higher fails. Death State starts at 0 HP.
-- Recovery: a Recover action or an hour of rest gives REC Stamina (half if strenuous); a day of rest
-  gives REC HP once treated (half if strenuous, +3 with Healing Hands).
-- Magic: casting spends Stamina; each point over the Vigor Threshold in a round costs 5 HP.
-- Damage in the tracker: (damage - SP) x location (head x3, torso x1, limbs x1/2, minimum 1), then
+- Recovery: the Recover action gives REC Stamina. Resting and healing are left to the core book.
+- Magic: casting spends Stamina; going over the Vigor Threshold in a round is flagged as overexertion.
+- Damage in the tracker: (damage - SP) x location (head x3, torso x1, limbs x1/2, unverified), then
   halved if resistant or doubled if susceptible, and armor loses 1 SP when damage gets through.
 
 ## Code map

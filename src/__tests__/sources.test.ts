@@ -1,37 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { rollFlat } from '../rules/dice'
 import { derive, SKILL_BY_ID, type Stats } from '../rules/rules'
-import { castSpell, derived, restDay, restHour, recoverAction, staCostNumber, toCombatant } from '../model/combat'
+import { castSpell, derived, recoverAction, staCostNumber, toCombatant } from '../model/combat'
 import { applyJournalUpdate, BESTIARY, bestiaryCharacter, RETIRED_ESTIMATES } from '../model/bestiary'
 import { JOURNAL_MONSTERS, journalCharacter, journalId } from '../model/journalBestiary'
 import { applyDamage, entryFromCharacter, entryState, monsterEntries, recoverStamina, spendStamina } from '../model/encounter'
-import { findEntry } from '../model/catalog'
 import { newCharacter } from '../model/factory'
 
-// Checks against the rules sources in the project folder: Easy Mode (EM), A Witcher's Journal (WJ)
-// and the core v4 errata.
+// Checks against the rules sources in the project folder: A Witcher's Journal (WJ) and the core v4
+// errata.
 
 const st = (INT: number, REF: number, DEX: number, BODY: number, SPD: number, EMP: number, CRA: number, WILL: number, LUCK = 5): Stats => ({
   INT, REF, DEX, BODY, SPD, EMP, CRA, WILL, LUCK,
 })
 
-describe('derived stats match the Easy Mode pregens', () => {
-  // Name, stats, then HP, Save (Stun), REC, Leap, punch, kick as printed on the sheets.
-  const pregens: Array<[string, Stats, number, number, number, number, string, string]> = [
-    ['Luskar (witcher)', st(5, 11, 10, 8, 6, 1, 5, 7), 35, 7, 7, 3, '1d6+2', '1d6+6'],
-    ['Aislinn (mage)', st(8, 5, 6, 4, 5, 7, 6, 10), 35, 7, 7, 3, '1d6-2', '1d6+2'],
-    ['Man at arms', st(4, 10, 8, 10, 6, 5, 4, 8), 45, 9, 9, 3, '1d6+4', '1d6+8'],
-    ['Dwarf doctor', st(9, 6, 6, 5, 8, 7, 10, 5), 25, 5, 5, 4, '1d6', '1d6+4'],
-  ]
-  for (const [name, s, hp, save, rec, leap] of pregens)
-    it(name, () => {
-      const d = derive(s)
-      expect([d.hp, d.sta, d.stun, d.rec, d.leap]).toEqual([hp, hp, save, rec, leap])
-    })
-  it('punch and kick for non-dwarves', () => {
-    expect([derive(pregens[0][1]).punch, derive(pregens[0][1]).kick]).toEqual(['1d6+2', '1d6+6'])
-    expect([derive(pregens[1][1]).punch, derive(pregens[1][1]).kick]).toEqual(['1d6-2', '1d6+2'])
-  })
+describe('derived stats', () => {
   it('run, leap and encumbrance match the Journal blocks (bullvore: RUN 9, LEAP 1, ENC 120, STUN 9)', () => {
     const d = derive(st(2, 5, 4, 12, 3, 1, 2, 6))
     expect([d.run, d.leap, d.enc, d.stun, d.rec]).toEqual([9, 1, 120, 9, 9])
@@ -39,45 +22,34 @@ describe('derived stats match the Easy Mode pregens', () => {
 })
 
 describe('saves', () => {
-  it('succeed only when the roll is under the Save value (EM p.14)', () => {
+  it('succeed only when the roll is under the Save value (errata p.47)', () => {
     expect(rollFlat('Stun', 7, () => 6).save).toEqual({ target: 7, passed: true })
     expect(rollFlat('Stun', 7, () => 7).save).toEqual({ target: 7, passed: false })
     expect(rollFlat('Stun', 7, () => 10).save?.passed).toBe(false)
   })
 })
 
-describe('recovery (EM p.18, errata p.151)', () => {
-  const hurt = () => {
+describe('Recover action (errata p.151)', () => {
+  it('gives REC Stamina, capped at max', () => {
     const c = newCharacter('pc')
     c.stats = st(5, 5, 5, 8, 5, 5, 5, 6) // base 7
     c.sta.current = 10
-    c.hp.current = 10
-    return c
-  }
-  it('Recover action and an hour of rest give REC Stamina, halved when strenuous', () => {
-    expect(recoverAction(hurt()).sta?.current).toBe(17)
-    expect(restHour(hurt(), false).sta?.current).toBe(17)
-    expect(restHour(hurt(), true).sta?.current).toBe(13)
-  })
-  it('a day of rest gives REC HP, halved when strenuous, +3 with Healing Hands, capped at max', () => {
-    expect(restDay(hurt(), false, false).hp?.current).toBe(17)
-    expect(restDay(hurt(), true, false).hp?.current).toBe(13)
-    expect(restDay(hurt(), false, true).hp?.current).toBe(20)
-    const full = hurt()
-    full.hp.current = derived(full).maxHp - 1
-    expect(restDay(full, false, false).hp?.current).toBe(derived(full).maxHp)
+    expect(recoverAction(c).sta?.current).toBe(17)
+    c.sta.current = derived(c).maxSta - 1
+    expect(recoverAction(c).sta?.current).toBe(derived(c).maxSta)
   })
 })
 
-describe('Vigor Threshold (EM p.21)', () => {
-  it("Aislinn's example: threshold 5, casts 5 then 3, takes 15 HP", () => {
+describe('Vigor Threshold', () => {
+  it('spends Stamina and flags going over the threshold in a round', () => {
     const c = newCharacter('pc')
     c.vigor = 5
     const a = castSpell(c, 5, 0)
-    expect(a.hpLoss).toBe(0)
+    expect(a.overThreshold).toBe(false)
     const b = castSpell({ ...c, ...a.patch }, 3, a.spent)
-    expect(b.hpLoss).toBe(15)
+    expect(b.overThreshold).toBe(true)
     expect(b.patch.sta?.current).toBe(c.sta.current - 8)
+    expect(b.patch.hp).toBeUndefined()
   })
   it('reads the number from a cost', () => {
     expect(staCostNumber('5')).toBe(5)
@@ -90,13 +62,10 @@ describe('Vigor Threshold (EM p.21)', () => {
 
 describe('encounter rules', () => {
   const m = () => monsterEntries({ name: 'X', count: 1, hp: 30, sta: 30, ref: 5, sp: 2, headSp: 2, dodge: 10, attack: 10, damage: '1d6', notes: '' })[0]
-  it('location multiplier rounds down with a minimum of 1 (EM p.18)', () => {
-    expect(applyDamage(m(), { amount: 3, location: 'rLeg', ignoreArmor: false, resistant: false }).hpLoss).toBe(1)
-  })
-  it('susceptible doubles damage after armor', () => {
+  it('susceptible doubles damage (WJ p.13)', () => {
     expect(applyDamage(m(), { amount: 7, location: 'torso', ignoreArmor: false, resistant: false, vulnerable: true }).hpLoss).toBe(10)
   })
-  it('0 HP is the death state', () => {
+  it('0 HP is the death state (errata p.153)', () => {
     expect(entryState({ ...m(), hp: { current: 0, max: 30 } })).toBe('dying')
   })
   it('Recover restores REC, extra actions spend Stamina', () => {
@@ -152,20 +121,6 @@ describe("A Witcher's Journal bestiary", () => {
     expect(RETIRED_ESTIMATES.filter((id) => ids.has(id))).toEqual([retired[0].id, retired[1].id])
     expect(ids.has(journalId('Bear'))).toBe(true)
     expect(applyJournalUpdate(next)).toHaveLength(next.length)
-  })
-})
-
-describe('catalog corrections from the Easy Mode pregens', () => {
-  it('armor SP', () => {
-    const sp = (n: string) => (findEntry(n) as { sp: number }).sp
-    expect([sp("Verden Archer's Hood"), sp('Chain Coif'), sp('Gambeson'), sp('Aedirnian Gambeson'), sp('Double Woven Gambeson'), sp('Brigandine')]).toEqual([3, 12, 3, 5, 8, 12])
-    expect([sp('Padded Trousers'), sp('Cavalry Trousers'), sp('Armored Trousers')]).toEqual([5, 3, 12])
-  })
-  it('ranged weapons', () => {
-    const w = (n: string) => findEntry(n) as { accuracy: number; damage: string }
-    expect([w('Hand Crossbow').accuracy, w('Hand Crossbow').damage]).toEqual([1, '2d6+2'])
-    expect([w('Crossbow').accuracy, w('Crossbow').damage]).toEqual([1, '4d6+2'])
-    expect(w('Short Bow').damage).toBe('3d6+3')
   })
 })
 

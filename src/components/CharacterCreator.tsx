@@ -105,8 +105,9 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
       </header>
       <p className="hint creator-source">
         The app has no copy of the core rulebook's character creation rules. The errata confirms the stat cap of 10, the starting skill cap of
-        6, home language at +8 and starting crowns; Easy Mode confirms the racial perks. The stat point pools, 44 profession points, INT + REF
-        pick-up points, profession skill lists and starting gear are from memory and unverified, so check them against your book.
+        6, home language at +8, starting crowns and the Elf Marksman and Dwarf Tough perks. The other racial perk text, the stat point pools, 44
+        profession points, INT + REF pick-up points, profession skill lists and starting gear are from memory and unverified, so check them
+        against your book.
       </p>
 
       <nav className="steps" aria-label="Creation steps">
