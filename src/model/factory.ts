@@ -68,6 +68,12 @@ export function applyProfession(c: Character, profession: string): Character {
   }
 }
 
+// A player the GM adds by hand: a name, race and profession, with the rest of the sheet left blank
+// to fill in later. Until it has stats or weapons, the tracker treats it as a name only.
+export function newPlayer(name: string, race: string, profession: string): Character {
+  return applyProfession({ ...newCharacter('pc', name.trim()), race }, profession)
+}
+
 // Filled-in examples so a fresh install shows what a sheet looks like. They're named as examples.
 export function sampleCharacters(): Character[] {
   const witcher = newCharacter('pc', 'Vesemir-style witcher (example)')

@@ -12,11 +12,12 @@ import { JOURNAL_TITLE } from './model/journalBestiary'
 import { missingNpcPack } from './model/npcPack'
 import { applyCampaignUpdate } from './model/campaign'
 import { derived } from './model/combat'
-import { currentEntry, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
-import { newCharacter, sampleCharacters, uid } from './model/factory'
+import { currentEntry, isNameOnlySheet, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
+import { newCharacter, newPlayer, sampleCharacters, uid } from './model/factory'
 import type { Character } from './model/types'
 import { rollCheck, rollFlat, type CheckRoll } from './rules/dice'
-import { exportJson, LocalEncounterRepository, LocalStorageRepository, parseCharacters } from './storage/store'
+import { exportJson, LocalEncounterRepository, LocalStorageRepository, parseCharacters, takeLegacyPartyNames } from './storage/store'
+import { PROFESSIONS, RACES } from './rules/rules'
 
 const repo = new LocalStorageRepository()
 const encounterRepo = new LocalEncounterRepository()
@@ -49,7 +50,11 @@ function initialCharacters(): Character[] {
   // The original NPC pack arrived after the bestiary, so it has its own once-only flag.
   const withPack = storageFlag(NPC_PACK_KEY) ? withBestiary : [...withBestiary, ...missingNpcPack(withBestiary)]
   // The campaign villain and his captain, two more Journal monsters, and a trimmed pack, once.
-  return storageFlag(CAMPAIGN_KEY) ? withPack : applyCampaignUpdate(withPack)
+  const withCampaign = storageFlag(CAMPAIGN_KEY) ? withPack : applyCampaignUpdate(withPack)
+  // Names typed into the tracker's old party list become players on the Players tab.
+  const known = new Set(withCampaign.filter((c) => c.kind === 'pc').map((c) => c.name.trim().toLowerCase()))
+  const legacy = takeLegacyPartyNames().filter((n) => !known.has(n.toLowerCase()))
+  return [...withCampaign, ...legacy.map((n) => newPlayer(n, 'Human', ''))]
 }
 
 export default function App() {
@@ -176,6 +181,7 @@ export default function App() {
         <input className="roster-search" type="search" aria-label="Search NPCs" placeholder="Search name or type" value={query} onChange={(e) => setQuery(e.target.value)} />
         </>
         )}
+        {IS_GM && mode === 'players' && <AddPlayerForm onAdd={(c) => setCharacters((list) => [...list, c])} />}
         <ul className="roster-list">
           {visible.map((c) => {
             const d = derived(c)
@@ -195,16 +201,20 @@ export default function App() {
                     {c.bestiary && <span className="kind-pill kind-beast">{c.bestiary.category}</span>}
                     {(c.bestiary ? [c.bestiary.threat] : [IS_GM ? c.player : '', c.race, c.profession]).filter(Boolean).join(' · ')}
                   </span>
-                  <span className={'roster-hp' + (c.hp.current <= d.maxHp / 4 ? ' roster-hp-low' : '')}>
-                    HP {c.hp.current}/{d.maxHp}
-                  </span>
+                  {IS_GM && isNameOnlySheet(c) ? (
+                    <span className="roster-hp">Name only</span>
+                  ) : (
+                    <span className={'roster-hp' + (c.hp.current <= d.maxHp / 4 ? ' roster-hp-low' : '')}>
+                      HP {c.hp.current}/{d.maxHp}
+                    </span>
+                  )}
                 </button>
               </li>
             )
           })}
           {visible.length === 0 && (
             <li className="hint">
-              {IS_GM && mode === 'players' ? 'No players yet. Ask them to tap Send to GM in the Player version, then use Import players.' : 'No characters here yet.'}
+              {IS_GM && mode === 'players' ? 'No players yet. Add each one above with a name, race and profession. If a player keeps their own sheet in the Player version, they can tap Send to GM and you import it.' : 'No characters here yet.'}
             </li>
           )}
         </ul>
@@ -232,8 +242,8 @@ export default function App() {
               </button>
             </>
           )}
-          <button type="button" className={'btn' + (IS_GM && mode === 'players' ? ' btn-primary' : '')} onClick={() => setTransfer({ mode: 'import' })}>
-            {IS_GM ? 'Import players' : 'Import'}
+          <button type="button" className="btn" onClick={() => setTransfer({ mode: 'import' })}>
+            {IS_GM ? 'Import sheets' : 'Import'}
           </button>
           <button type="button" className="btn" onClick={() => setTransfer({ mode: 'export', ids: characters.map((c) => c.id) })}>
             {IS_GM ? 'Export all' : 'Back up all'}
@@ -579,5 +589,43 @@ function TransferDialog(props: {
       )}
       {message && <p className="dialog-message">{message}</p>}
     </dialog>
+  )
+}
+
+// Adds a player to the GM's list with just a name, race and profession; the sheet can be filled in later.
+function AddPlayerForm({ onAdd }: { onAdd: (c: Character) => void }) {
+  const [name, setName] = useState('')
+  const [race, setRace] = useState<string>('Human')
+  const [profession, setProfession] = useState('')
+  return (
+    <form
+      className="add-player"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!name.trim()) return
+        onAdd(newPlayer(name, race, profession))
+        setName('')
+        setRace('Human')
+        setProfession('')
+      }}
+    >
+      <input aria-label="Player name" placeholder="Player or character name" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="add-player-row">
+        <select aria-label="Race" value={race} onChange={(e) => setRace(e.target.value)}>
+          {RACES.map((r) => (
+            <option key={r}>{r}</option>
+          ))}
+        </select>
+        <select aria-label="Profession" value={profession} onChange={(e) => setProfession(e.target.value)}>
+          <option value="">Profession…</option>
+          {PROFESSIONS.map((p) => (
+            <option key={p.name}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+      <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
+        Add player
+      </button>
+    </form>
   )
 }

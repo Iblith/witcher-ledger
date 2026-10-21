@@ -39,13 +39,6 @@ export interface EncounterEntry {
   playerRolls?: boolean
 }
 
-// A player in the GM's party list: a name, and REF if the GM wants the app to roll for them.
-export interface PartyMember {
-  id: string
-  name: string
-  ref: number | null
-}
-
 export interface Encounter {
   id: string
   name: string
@@ -180,33 +173,53 @@ export function entriesFromTemplate(c: Character, count: number, taken: string[]
   })
 }
 
-// Name-only players for the whole party at once, skipping anyone already in the fight by name.
-// With a REF the app rolls for them; without one the player rolls and the GM types the result.
-export function partyEntries(party: PartyMember[], already: EncounterEntry[] = []): EncounterEntry[] {
-  const inFight = new Set(already.map((x) => x.name.trim().toLowerCase()))
-  return party
-    .filter((p) => p.name.trim() && !inFight.has(p.name.trim().toLowerCase()))
-    .map((p) => ({
-      id: uid(),
-      characterId: null,
-      kind: 'pc' as const,
-      name: p.name.trim(),
-      initiativeBase: p.ref ?? 0,
-      initiative: null,
-      hp: { current: 0, max: 0 },
-      sta: { current: 0, max: 0 },
-      stun: 0,
-      woundThreshold: 0,
-      sp: Object.fromEntries(HIT_LOCATIONS.map((l) => [l, 0])) as Record<HitLocation, number>,
-      defenses: { dodge: 0, reposition: 0 },
-      attacks: [],
-      conditions: [],
-      injuries: [],
-      notes: '',
-      defeated: false,
-      nameOnly: true,
-      playerRolls: p.ref === null,
-    }))
+// A player sheet the GM added with just a name, race and profession: stats untouched, no
+// weapons or skills. It joins a fight as a name only and the player rolls their own initiative.
+export function isNameOnlySheet(c: Character): boolean {
+  return (
+    c.kind === 'pc' &&
+    Object.values(c.stats).every((v) => v === 5) &&
+    c.weapons.length === 0 &&
+    Object.values(c.skills).every((v) => !v)
+  )
+}
+
+function nameOnlyEntry(c: Character): EncounterEntry {
+  return {
+    id: uid(),
+    characterId: c.id,
+    kind: 'pc',
+    name: c.name,
+    initiativeBase: 0,
+    initiative: null,
+    hp: { current: 0, max: 0 },
+    sta: { current: 0, max: 0 },
+    stun: 0,
+    woundThreshold: 0,
+    sp: Object.fromEntries(HIT_LOCATIONS.map((l) => [l, 0])) as Record<HitLocation, number>,
+    defenses: { dodge: 0, reposition: 0 },
+    attacks: [],
+    conditions: [],
+    injuries: [],
+    notes: [c.race, c.profession].filter(Boolean).join(' · '),
+    defeated: false,
+    nameOnly: true,
+    playerRolls: true,
+  }
+}
+
+// A player sheet as a combatant: name only while the sheet is still blank, the full sheet otherwise.
+export function playerEntry(c: Character): EncounterEntry {
+  return isNameOnlySheet(c) ? nameOnlyEntry(c) : entryFromCharacter(c)
+}
+
+// Every player on the Players tab who isn't in the fight yet, in one go.
+export function partyEntries(characters: Character[], already: EncounterEntry[] = []): EncounterEntry[] {
+  const inFight = new Set(already.map((x) => x.characterId).filter(Boolean))
+  return characters
+    .filter((c) => c.kind === 'pc' && !inFight.has(c.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(playerEntry)
 }
 
 // Another copy of a combatant at full health, named after the last copy ("Bandit 3" -> "Bandit 4").
@@ -386,7 +399,8 @@ export function spendStamina(x: EncounterEntry, amount: number): EncounterEntry 
 
 // Copies a fight's HP, Stamina, armor SP and new injuries back onto the linked character sheets.
 export function writeBack(e: Encounter, characters: Character[]): Character[] {
-  const byChar = new Map(e.entries.filter((x) => x.characterId).map((x) => [x.characterId!, x]))
+  // Name-only players carry no numbers, so there is nothing to save to their sheets.
+  const byChar = new Map(e.entries.filter((x) => x.characterId && !x.nameOnly).map((x) => [x.characterId!, x]))
   return characters.map((c) => {
     const x = byChar.get(c.id)
     if (!x) return c

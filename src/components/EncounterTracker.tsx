@@ -9,7 +9,9 @@ import {
   entriesFromTemplate,
   entryState,
   monsterEntries,
+  isNameOnlySheet,
   partyEntries,
+  playerEntry,
   recoverStamina,
   rollHitLocation,
   spendStamina,
@@ -18,10 +20,7 @@ import {
   type Encounter,
   type EncounterEntry,
   type MonsterInput,
-  type PartyMember,
 } from '../model/encounter'
-import { uid } from '../model/factory'
-import { LocalPartyRepository } from '../storage/store'
 import type { Character } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
@@ -30,7 +29,6 @@ import type { CritSeverity } from '../model/types'
 
 const SP_SHORT: Record<HitLocation, string> = { head: 'H', torso: 'T', rArm: 'RA', lArm: 'LA', rLeg: 'RL', lLeg: 'LL' }
 const STATE_LABEL = { ok: '', wounded: 'Wounded', dying: 'Death state', defeated: 'Out' } as const
-const partyRepo = new LocalPartyRepository()
 
 export interface TrackerProps {
   encounter: Encounter
@@ -46,14 +44,10 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
   // Remembers which version of the fight was saved, so a new hit shows the button again.
   const [savedEntries, setSavedEntries] = useState<EncounterEntry[] | null>(null)
   const wroteBack = savedEntries === e.entries
-  const [party, setPartyState] = useState<PartyMember[]>(() => partyRepo.load())
-  const setParty = (p: PartyMember[]) => {
-    setPartyState(p)
-    partyRepo.save(p)
-  }
   const order = turnOrder(e)
-  const linked = e.entries.filter((x) => x.characterId).length
-  const partyToAdd = partyEntries(party, e.entries)
+  const linked = e.entries.filter((x) => x.characterId && !x.nameOnly).length
+  const players = characters.filter((c) => c.kind === 'pc')
+  const partyToAdd = partyEntries(characters, e.entries)
   const waiting = e.entries.filter((x) => x.playerRolls && x.initiative === null)
   const cleared = e.entries.filter((x) => x.defeated && !x.characterId && !x.nameOnly)
   const upNextId = e.activeId ? advanceTurn(e, 1).activeId : null
@@ -120,7 +114,7 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
       {e.entries.length === 0 ? (
         <div className="panel">
           <p className="hint">
-            No one is in this fight yet. {party.length > 0 ? 'Add your party with one tap above, then add' : 'Add your party by name, then add'} NPCs,
+            No one is in this fight yet. {players.length > 0 ? 'Add your party with one tap above, then add' : 'Add your players on the Players tab, then add'} NPCs,
             creatures from the bestiary or quick monsters with Add combatants.
           </p>
         </div>
@@ -218,8 +212,6 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
         <AddDialog
           characters={characters}
           entries={e.entries}
-          party={party}
-          onPartyChange={setParty}
           onClose={() => setAdding(false)}
           onAdd={(entries) => {
             addEntries(entries)
@@ -550,17 +542,14 @@ const BLANK_MONSTER: MonsterInput = { name: '', count: 1, hp: 20, sta: 20, ref: 
 function AddDialog(props: {
   characters: Character[]
   entries: EncounterEntry[]
-  party: PartyMember[]
-  onPartyChange: (p: PartyMember[]) => void
   onClose: () => void
   onAdd: (entries: EncounterEntry[]) => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [m, setM] = useState<MonsterInput>(BLANK_MONSTER)
-  const [newName, setNewName] = useState('')
   const already = new Set(props.entries.map((x) => x.characterId).filter(Boolean) as string[])
-  const partyToAdd = partyEntries(props.party, props.entries)
+  const partyToAdd = partyEntries(props.characters, props.entries)
   // Any NPC sheet can be added as copies: the GM's own and campaign NPCs first, then the bestiary.
   const npcs = props.characters.filter((c) => c.kind === 'npc')
   const mine = npcs.filter((c) => !c.bestiary).sort((a, b) => a.name.localeCompare(b.name))
@@ -572,70 +561,25 @@ function AddDialog(props: {
     if (ref.current && !ref.current.open) ref.current.showModal()
   }, [])
   const setMon = (patch: Partial<MonsterInput>) => setM({ ...m, ...patch })
-  const setMember = (id: string, patch: Partial<PartyMember>) => props.onPartyChange(props.party.map((p) => (p.id === id ? { ...p, ...patch } : p)))
-  const addMember = () => {
-    const name = newName.trim()
-    if (!name) return
-    props.onPartyChange([...props.party, { id: uid(), name, ref: null }])
-    setNewName('')
-  }
   const pcs = props.characters.filter((c) => c.kind === 'pc').sort((a, b) => a.name.localeCompare(b.name))
   return (
     <dialog ref={ref} className="dialog dialog-wide" onClose={props.onClose}>
       <h2>Add combatants</h2>
       <section className="stack">
         <h3 className="panel-title">Your party</h3>
-        <p className="hint">
-          Player names only, kept for every fight. Leave REF empty and the player rolls their own initiative; fill it in and Roll initiative rolls for them.
-        </p>
-        {props.party.length > 0 && (
-          <ul className="party-list">
-            {props.party.map((p) => (
-              <li key={p.id}>
-                <input className="party-name" aria-label="Player name" value={p.name} onChange={(ev) => setMember(p.id, { name: ev.target.value })} />
-                <label className="party-ref">
-                  <span className="field-label">REF</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    className="num"
-                    aria-label={`${p.name} REF`}
-                    value={p.ref ?? ''}
-                    placeholder="–"
-                    onChange={(ev) => setMember(p.id, { ref: ev.target.value === '' ? null : Number(ev.target.value) })}
-                  />
-                </label>
-                <button type="button" className="icon-btn" aria-label={`Remove ${p.name} from the party`} onClick={() => props.onPartyChange(props.party.filter((y) => y.id !== p.id))}>
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form
-          className="party-add"
-          onSubmit={(ev) => {
-            ev.preventDefault()
-            addMember()
-          }}
-        >
-          <input aria-label="New player name" value={newName} placeholder="Player or character name" onChange={(ev) => setNewName(ev.target.value)} />
-          <button type="submit" className="btn" disabled={!newName.trim()}>
-            Add name
-          </button>
-        </form>
-        <div>
-          <button type="button" className="btn btn-primary" disabled={partyToAdd.length === 0} onClick={() => props.onAdd(partyToAdd)}>
-            {props.party.length > 0 && partyToAdd.length === 0 ? 'Whole party is in the fight' : `Add whole party to initiative${partyToAdd.length ? ` (${partyToAdd.length})` : ''}`}
-          </button>
-        </div>
-      </section>
-      {pcs.length > 0 && (
-        <>
-          <hr className="rule" />
-          <section className="stack">
-            <h3 className="panel-title">Imported player sheets</h3>
-            <p className="hint">Full sheets: their wounds can be saved back after the fight.</p>
+        {pcs.length === 0 ? (
+          <p className="hint">No players yet. Add them on the Players tab with a name, race and profession.</p>
+        ) : (
+          <>
+            <p className="hint">
+              Players added with just a name join as a name, and they roll their own initiative. Full sheets bring their numbers, and their wounds
+              can be saved back after the fight.
+            </p>
+            <div>
+              <button type="button" className="btn btn-primary" disabled={partyToAdd.length === 0} onClick={() => props.onAdd(partyToAdd)}>
+                {partyToAdd.length === 0 ? 'Whole party is in the fight' : `Add whole party to initiative (${partyToAdd.length})`}
+              </button>
+            </div>
             <ul className="pick-list">
               {pcs.map((c) => (
                 <li key={c.id}>
@@ -651,6 +595,7 @@ function AddDialog(props: {
                       }}
                     />
                     {c.name}
+                    {isNameOnlySheet(c) && <span className="hint">name only</span>}
                     {already.has(c.id) && <span className="hint">already in</span>}
                   </label>
                 </li>
@@ -661,14 +606,14 @@ function AddDialog(props: {
                 type="button"
                 className="btn btn-primary"
                 disabled={picked.size === 0}
-                onClick={() => props.onAdd(props.characters.filter((c) => picked.has(c.id)).map(entryFromCharacter))}
+                onClick={() => props.onAdd(props.characters.filter((c) => picked.has(c.id)).map(playerEntry))}
               >
                 Add {picked.size || ''} selected
               </button>
             </div>
-          </section>
-        </>
-      )}
+          </>
+        )}
+      </section>
       {npcs.length > 0 && (
         <>
           <hr className="rule" />

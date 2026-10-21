@@ -8,8 +8,11 @@ import {
   newEncounter,
   partyEntries,
   rollInitiative,
+  isNameOnlySheet,
   turnOrder,
+  writeBack,
 } from '../model/encounter'
+import { newPlayer } from '../model/factory'
 import { missingNpcPack, RETIRED_PACK } from '../model/npcPack'
 import type { Character } from '../model/types'
 import { PROFESSIONS, RACES, SKILL_BY_ID } from '../rules/rules'
@@ -70,32 +73,41 @@ describe('campaign update for an existing GM list', () => {
   })
 })
 
-describe('party of names in the encounter tracker', () => {
-  const party = [
-    { id: 'a', name: 'Ada', ref: null },
-    { id: 'b', name: 'Bren', ref: 7 },
-    { id: 'c', name: '  ', ref: null },
-  ]
+describe('players added by name, race and profession', () => {
+  const ada = newPlayer('  Ada ', 'Elf', 'Bard')
+  const bren = newPlayer('Bren', 'Human', 'Mage')
+  const full = { ...newPlayer('Cass', 'Dwarf', 'Man-At-Arms'), stats: { ...ada.stats, REF: 7 } }
+  const players = [bren, ada, full, campaignNpcs()[0]]
 
-  it('adds every named player in one go, skipping blanks and anyone already in', () => {
-    const first = partyEntries(party)
-    expect(first.map((x) => x.name)).toEqual(['Ada', 'Bren'])
-    expect(first.every((x) => x.nameOnly && x.kind === 'pc' && x.characterId === null)).toBe(true)
-    expect(partyEntries(party, first.slice(0, 1)).map((x) => x.name)).toEqual(['Bren'])
+  it('keeps the name, race and profession and leaves the rest blank', () => {
+    expect([ada.name, ada.race, ada.profession, ada.definingSkill, ada.kind]).toEqual(['Ada', 'Elf', 'Bard', 'Busking', 'pc'])
+    expect(isNameOnlySheet(ada)).toBe(true)
+    expect(isNameOnlySheet(full)).toBe(false)
   })
 
-  it('rolls for players with REF, leaves the rest for the GM to type, and waits to start', () => {
-    const e = { ...newEncounter(), entries: partyEntries(party) }
+  it('adds every player in one go, name-only or full sheet, skipping NPCs and anyone already in', () => {
+    const first = partyEntries(players)
+    expect(first.map((x) => x.name)).toEqual(['Ada', 'Bren', 'Cass'])
+    expect(first.map((x) => !!x.nameOnly)).toEqual([true, true, false])
+    expect(first[0].notes).toBe('Elf · Bard')
+    expect(partyEntries(players, first.slice(0, 1)).map((x) => x.name)).toEqual(['Bren', 'Cass'])
+  })
+
+  it('rolls for full sheets, leaves name-only players to type their own, and waits to start', () => {
+    const e = { ...newEncounter(), entries: partyEntries(players) }
     const rolled = rollInitiative(e, false, d10(5))
-    expect(rolled.entries.find((x) => x.name === 'Bren')!.initiative).toBe(12)
+    expect(rolled.entries.find((x) => x.name === 'Cass')!.initiative).toBe(12)
     expect(rolled.entries.find((x) => x.name === 'Ada')!.initiative).toBeNull()
     expect(rolled.activeId).toBeNull()
-    const typed = { ...rolled, entries: rolled.entries.map((x) => (x.name === 'Ada' ? { ...x, initiative: 15 } : x)) }
-    expect(turnOrder(rollInitiative(typed, false, d10(1))).map((x) => x.name)).toEqual(['Ada', 'Bren'])
+    const typed = { ...rolled, entries: rolled.entries.map((x) => (x.nameOnly ? { ...x, initiative: x.name === 'Ada' ? 15 : 3 } : x)) }
+    expect(turnOrder(rollInitiative(typed, false, d10(1))).map((x) => x.name)).toEqual(['Ada', 'Cass', 'Bren'])
   })
 
-  it('never shows a name-only player as dying', () => {
-    expect(entryState(partyEntries(party)[0])).toBe('ok')
+  it('never shows a name-only player as dying, or saves its empty numbers to the sheet', () => {
+    const [entry] = partyEntries([ada])
+    expect(entryState(entry)).toBe('ok')
+    const e = { ...newEncounter(), entries: [{ ...entry, hp: { current: -5, max: 0 } }] }
+    expect(writeBack(e, [ada])[0]).toBe(ada)
   })
 })
 
