@@ -102,6 +102,11 @@ export function CharacterCreator({ onCreate, onCancel }: { onCreate: (c: Charact
           Discard
         </button>
       </header>
+      <p className="hint creator-source">
+        The app has no copy of the core rulebook's character creation rules. The errata confirms the stat cap of 10, the starting skill cap of
+        6, home language at +8 and starting crowns; Easy Mode confirms the racial perks. The stat point pools, 44 profession points, INT + REF
+        pick-up points, profession skill lists and starting gear are from memory and unverified, so check them against your book.
+      </p>
 
       <nav className="steps" aria-label="Creation steps">
         <ol>
@@ -310,7 +315,7 @@ function Race({ d, setD }: Omit<StepProps, 'setC'>) {
 function Profession({ d, setD }: Omit<StepProps, 'setC'>) {
   const c = d.character
   return (
-    <Step title="Choose your profession" intro="Your profession gives you a defining skill, ten profession skills (starred for you on the Skills step) and starting gear.">
+    <Step title="Choose your profession" intro="Your profession gives you a defining skill, ten profession skills (starred for you on the Skills step) and starting gear. The skill and gear lists are unverified.">
       <div className="choice-grid">
         {PROFESSIONS.map((p) => (
           <button

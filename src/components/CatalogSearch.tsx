@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { describe, search, type CatalogEntry, type CatalogKind } from '../model/catalog'
+import { describe, search, sourceNote, type CatalogEntry, type CatalogKind } from '../model/catalog'
 
 // Type to search the item catalog, then tap a result to add it. With onCustom,
 // a name that isn't in the catalog can still be added as a plain item.
@@ -61,6 +61,7 @@ export function CatalogSearch(props: {
               <button type="button" className="catalog-result" onClick={() => pick(r)}>
                 <span className="catalog-name">{r.name}</span>
                 <span className="catalog-desc">{describe(r)}</span>
+                <span className="catalog-source">{sourceNote(r) ?? 'Unverified: from memory of the core book, check yours.'}</span>
               </button>
             </li>
           ))}

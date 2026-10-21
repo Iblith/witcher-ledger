@@ -598,6 +598,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .catalog-result:hover, .catalog-result:focus-visible { background: var(--gold-soft); }
 .catalog-name { display: block; }
 .catalog-desc { display: block; color: var(--muted); font-size: 0.85rem; }
+.catalog-source { display: block; color: var(--muted); font-size: 0.75rem; font-style: italic; }
 .catalog-empty { padding: 6px 8px; }
 .catalog-close { margin: 4px; }
 .armor-pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 10px; }

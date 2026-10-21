@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import {
   advanceTurn,
   applyDamage,
+  CONDITION_HELP,
   CONDITIONS,
   entryFromCharacter,
   entriesFromTemplate,
   entryState,
   monsterEntries,
+  recoverStamina,
   rollHitLocation,
+  spendStamina,
   rollInitiative,
   turnOrder,
   type Encounter,
@@ -242,8 +245,22 @@ function EntryRow(props: {
               {a.name} {a.base}
             </button>
           ))}
-          <button type="button" className="roll-btn roll-labeled" onClick={() => props.onRoll(`${x.name} Stun save (need ${x.stun} or less)`, 0, true)} title={`Roll 1d10, ${x.stun} or less to stay up`}>
-            Stun {x.stun}
+          <button
+            type="button"
+            className="roll-btn roll-labeled"
+            onClick={() => props.onRoll(`${x.name} Stun save (under ${x.stun})`, x.stun, true)}
+            title={`Roll 1d10: under ${x.stun} saves, ${x.stun} or more fails`}
+          >
+            {state === 'dying' ? 'Death save' : 'Stun save'} {x.stun}
+          </button>
+          <button type="button" className="btn" onClick={() => props.onChange(recoverStamina(x))} title="Full-round Recover action: regain Stamina equal to REC">
+            Recover +{x.rec ?? x.woundThreshold}
+          </button>
+          <button type="button" className="btn btn-quiet" onClick={() => props.onChange(spendStamina(x, 3))} title="Extra action at -3, costs 3 Stamina (players only)">
+            Extra action −3
+          </button>
+          <button type="button" className="btn btn-quiet" onClick={() => props.onChange(spendStamina(x, 1))} title="Each defense after the first in a round costs 1 Stamina">
+            Extra defense −1
           </button>
         </div>
 
@@ -277,6 +294,7 @@ function EntryRow(props: {
                 type="button"
                 className={'cond' + (on ? ' cond-on' : '')}
                 aria-pressed={on}
+                title={CONDITION_HELP[c]}
                 onClick={() => props.onChange({ conditions: on ? x.conditions.filter((y) => y !== c) : [...x.conditions, c] })}
               >
                 {c}
@@ -302,11 +320,12 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
   const [amount, setAmount] = useState(0)
   const [location, setLocation] = useState<HitLocation>('torso')
   const [ignoreArmor, setIgnoreArmor] = useState(false)
-  const [resistant, setResistant] = useState(x.kind === 'monster')
+  const [resistant, setResistant] = useState(x.resistant ?? x.kind === 'monster')
+  const [vulnerable, setVulnerable] = useState(false)
   const [crit, setCrit] = useState(false)
   const [severity, setSeverity] = useState<CritSeverity>('simple')
   const [critText, setCritText] = useState('')
-  const base = applyDamage(x, { amount, location, ignoreArmor, resistant })
+  const base = applyDamage(x, { amount, location, ignoreArmor, resistant, vulnerable })
   const injury = crit ? { ...blankInjury(location), severity, description: critText.trim() } : null
   const preview = injury
     ? {
@@ -348,6 +367,10 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
         <label className="check">
           <input type="checkbox" checked={resistant} onChange={(ev) => setResistant(ev.target.checked)} />
           Resistant (half)
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={vulnerable} onChange={(ev) => setVulnerable(ev.target.checked)} />
+          Susceptible (double)
         </label>
         <label className="check">
           <input type="checkbox" checked={crit} onChange={(ev) => setCrit(ev.target.checked)} />
@@ -460,7 +483,7 @@ function AddDialog(props: {
             </div>
             {beast && (
               <p className="hint">
-                {beast.bestiary!.threat} · HP {beast.hp.maxOverride ?? beast.hp.current} · {beast.bestiary!.checked ? 'Checked against the book' : 'Stats not yet checked against the book'}
+                {beast.bestiary!.threat} · HP {beast.hp.maxOverride ?? beast.hp.current} · {beast.bestiary!.source === 'journal' ? `A Witcher's Journal p. ${beast.bestiary!.page}` : beast.bestiary!.checked ? 'Checked against the book' : 'Estimated stats, not yet checked against the book'}
               </p>
             )}
             <div>

@@ -1,5 +1,8 @@
-// Core rules data for The Witcher TTRPG (R. Talsorian), with the v4 errata applied
-// where it touches the character sheet (Stun capped at 10, Leap = Run/5).
+// Core rules data for The Witcher TTRPG (R. Talsorian).
+//
+// Sources in the project (no core rulebook): the core v4 errata, the Easy Mode quickstart and
+// A Witcher's Journal. What each one settles is noted next to the data. Anything marked
+// UNVERIFIED is from memory of the core book and should be checked against it.
 
 export const STAT_KEYS = ['INT', 'REF', 'DEX', 'BODY', 'SPD', 'EMP', 'CRA', 'WILL', 'LUCK'] as const
 export type StatKey = (typeof STAT_KEYS)[number]
@@ -20,10 +23,23 @@ export interface SkillDef {
   id: string
   name: string
   stat: StatKey
+  // Listed with this governing stat in Easy Mode (p. 14-15). False: the skill and its stat are
+  // from memory of the core book.
+  sourced: boolean
 }
 
+// The skills Easy Mode lists, with the stat it gives each. Alchemy is the one disagreement: Easy Mode
+// says INT, but the core book (from memory, unverified) puts it under CRA, and this app keeps CRA.
+const EASY_MODE_SKILLS = new Set([
+  'Alchemy', 'Archery', 'Athletics', 'Awareness', 'Brawling', 'Business', 'Courage', 'Crafting', 'Crossbow', 'Deceit',
+  'Deduction', 'Disguise', 'Dodge/Escape', 'Education', 'Endurance', 'First Aid', 'Gambling', 'Human Perception',
+  'Intimidation', 'Melee', 'Monster Lore', 'Performance', 'Persuasion', 'Pick Lock', 'Riding', 'Physique',
+  'Resist Coercion', 'Resist Magic', 'Seduction', 'Sleight of Hand', 'Small Blades', 'Social Etiquette',
+  'Spell Casting', 'Staff/Spear', 'Stealth', 'Streetwise', 'Swordsmanship', 'Tactics', 'Wilderness Survival',
+])
+
 const s = (stat: StatKey, names: string[]): SkillDef[] =>
-  names.map((name) => ({ id: slug(name), name, stat }))
+  names.map((name) => ({ id: slug(name), name, stat, sourced: EASY_MODE_SKILLS.has(name) && name !== 'Alchemy' }))
 
 export function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -88,6 +104,8 @@ export const RACES = ['Human', 'Elf', 'Dwarf', 'Witcher', 'Monster', 'Other'] as
 export interface ProfessionDef {
   name: string
   definingSkill: string
+  // Starting Vigor Threshold. Easy Mode pregens confirm Witcher 2, Mage 5 and 0 for Bard, Criminal,
+  // Doctor and Man-At-Arms. Craftsman, Merchant and Priest are UNVERIFIED.
   vigor: number
 }
 
@@ -131,7 +149,11 @@ export interface DerivedStats {
   kick: string
 }
 
-// Physical table: everything keys off (BODY + WILL) / 2, rounded down.
+// Physical table: everything keys off (BODY + WILL) / 2, rounded down. Checked against the Easy Mode
+// pregens and the Journal stat blocks: HP = STA = 5 × base for characters (monsters set their own),
+// REC = Stun = base with Stun capped at 10 (errata), Run = SPD × 3, Leap = Run / 5, Enc = BODY × 10,
+// and Punch/Kick follow BODY as below. Resolve is UNVERIFIED (not in any source on hand).
+// Easy Mode calls Stun "Save".
 export function physicalBase(stats: Stats): number {
   return Math.floor((stats.BODY + stats.WILL) / 2)
 }

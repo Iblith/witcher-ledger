@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { checkBase, derived, carriedWeight } from '../model/combat'
+import { castSpell, checkBase, derived, carriedWeight, recoverAction, restDay, restHour, staCostNumber } from '../model/combat'
 import { applyProfession, uid } from '../model/factory'
 import type { Character, Item, Spell, SpellKind, Weapon } from '../model/types'
 import {
@@ -36,7 +36,8 @@ const TABS: Array<[Tab, string]> = [
 export interface SheetProps {
   character: Character
   onChange: (c: Character) => void
-  onRoll: (label: string, base: number) => void
+  // flat: a Save Check, where base is the Save value to roll under.
+  onRoll: (label: string, base: number, flat?: boolean) => void
 }
 
 export function Sheet({ character: c, onChange, onRoll }: SheetProps) {
@@ -118,6 +119,50 @@ function SheetHeader({ c, set, onChange }: { c: Character; set: Setter; onChange
   )
 }
 
+function Recovery({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetProps['onRoll'] }) {
+  const d = derived(c)
+  const [strenuous, setStrenuous] = useState(false)
+  const [treated, setTreated] = useState(false)
+  const [healingHands, setHealingHands] = useState(false)
+  const halfRec = Math.floor(d.rec / 2)
+  return (
+    <section className="panel">
+      <h2 className="panel-title">Saves and recovery</h2>
+      <div className="defense-row">
+        <button type="button" className="btn" onClick={() => onRoll(c.hp.current <= 0 ? 'Death save' : 'Stun save', d.stun, true)} title={`Roll 1d10: under ${d.stun} saves`}>
+          {c.hp.current <= 0 ? 'Death' : 'Stun'} save (under {d.stun})
+        </button>
+        <button type="button" className="btn" onClick={() => set(recoverAction(c))} title="Full-round action in combat">
+          Recover action +{d.rec} STA
+        </button>
+      </div>
+      <div className="defense-row">
+        <label className="check">
+          <input type="checkbox" checked={strenuous} onChange={(e) => setStrenuous(e.target.checked)} />
+          Strenuous (halves recovery)
+        </label>
+        <button type="button" className="btn" onClick={() => set(restHour(c, strenuous))}>
+          Rest 1 hour +{strenuous ? halfRec : d.rec} STA
+        </button>
+      </div>
+      <div className="defense-row">
+        <label className="check">
+          <input type="checkbox" checked={treated} onChange={(e) => setTreated(e.target.checked)} />
+          Treated (DC:10 First Aid)
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={healingHands} onChange={(e) => setHealingHands(e.target.checked)} />
+          By a Doctor's Healing Hands
+        </label>
+        <button type="button" className="btn" disabled={!treated && !healingHands} onClick={() => set(restDay(c, strenuous, healingHands))}>
+          Rest 1 day +{(strenuous ? halfRec : d.rec) + (healingHands ? 3 : 0)} HP
+        </button>
+      </div>
+      <p className="hint">HP only comes back after the wounds are treated. Rules from Easy Mode p. 18 and the core errata.</p>
+    </section>
+  )
+}
+
 function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetProps['onRoll'] }) {
   const d = derived(c)
   const setStat = (k: StatKey, v: number) => set({ stats: { ...c.stats, [k]: v } })
@@ -131,8 +176,11 @@ function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           max={d.maxHp}
           onChange={(v) => set({ hp: { ...c.hp, current: v } })}
           footer={
-            c.hp.current < 0 ? (
-              <p className="pool-note">Death state: stats at 1/3, Death save vs Stun {d.stun}</p>
+            c.hp.current <= 0 ? (
+              <p className="pool-note">
+                Death state: stats at 1/3. Death save each turn: roll under {d.stun}, with −1 for each save after the first. Luck raises the
+                target.
+              </p>
             ) : c.hp.current < d.woundThreshold ? (
               <p className="pool-note">Below wound threshold ({d.woundThreshold})</p>
             ) : null
@@ -144,10 +192,19 @@ function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           current={c.sta.current}
           max={d.maxSta}
           onChange={(v) => set({ sta: { ...c.sta, current: v } })}
-          footer={c.sta.current <= 0 ? <p className="pool-note">Out of Stamina: stunned, can only recover</p> : null}
+          footer={
+            c.sta.current <= 0 ? (
+              <p className="pool-note">
+                Out of Stamina: stunned, can only take Recover actions. If non-lethal damage did it: unconscious until 20 STA is recovered and a
+                Stun save is passed.
+              </p>
+            ) : null
+          }
         />
         <Pool label="Luck" tone="luck" current={c.luckCurrent} max={c.stats.LUCK} onChange={(v) => set({ luckCurrent: v })} />
       </section>
+
+      <Recovery c={c} set={set} onRoll={onRoll} />
 
       <section className="panel">
         <h2 className="panel-title">Statistics</h2>
@@ -250,6 +307,7 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
                   <SkillRow
                     key={s.id}
                     name={s.name}
+                    unverified={!s.sourced}
                     value={c.skills[s.id] ?? 0}
                     base={checkBase(c, s.id)}
                     onChange={(v) => setSkill(s.id, v)}
@@ -275,6 +333,10 @@ function Skills({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPr
           )
         })}
       </div>
+      <p className="hint">
+        Skills and their stats are checked against Easy Mode, except those tagged unverified. Easy Mode puts Alchemy under INT; this sheet
+        keeps CRA as remembered from the core book, so check yours.
+      </p>
       <form
         className="panel add-row"
         onSubmit={(e) => {
@@ -313,6 +375,7 @@ function SkillRow(props: {
   value: number
   base: number
   custom?: boolean
+  unverified?: boolean
   onChange: (v: number) => void
   onRoll: () => void
   onRemove?: () => void
@@ -322,6 +385,11 @@ function SkillRow(props: {
       <span className="skill-name">
         {props.name}
         {props.custom && <span className="tag">custom</span>}
+        {props.unverified && (
+          <span className="tag" title="Not in Easy Mode: the skill and its stat are from memory of the core book">
+            unverified
+          </span>
+        )}
       </span>
       <NumberInput ariaLabel={`${props.name} points`} value={props.value} min={0} max={20} onChange={props.onChange} className="skill-input" />
       <button type="button" className="roll-btn" onClick={props.onRoll} title={`Roll ${props.name}: ${props.base} + 1d10`}>
@@ -578,9 +646,23 @@ function Gear({ c, set }: { c: Character; set: Setter }) {
 
 const SPELL_KINDS: SpellKind[] = ['Spell', 'Sign', 'Invocation', 'Ritual', 'Hex']
 
+// Signs cost whatever the witcher chooses to spend (1 to 7), so they use the Sign STA field.
+const fixedCost = (s: Spell) => (s.kind === 'Sign' ? null : staCostNumber(s.staCost))
+
 function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetProps['onRoll'] }) {
   const upd = (id: string, patch: Partial<Spell>) => set({ spells: c.spells.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
   const castBase = checkBase(c, 'spell-casting')
+  // Stamina spent on magic this round, for the Vigor Threshold. Not saved: it resets each round.
+  const [spent, setSpent] = useState(0)
+  const [signSta, setSignSta] = useState(1)
+  const [lastCast, setLastCast] = useState('')
+  const cast = (name: string, cost: number) => {
+    const r = castSpell(c, cost, spent)
+    set(r.patch)
+    setSpent(r.spent)
+    setLastCast(`${name}: −${cost} STA${r.hpLoss ? `, −${r.hpLoss} HP for going over the Vigor Threshold` : ''}`)
+    onRoll(`Cast ${name}`, castBase)
+  }
   return (
     <div className="stack">
       <section className="panel defense-row">
@@ -593,6 +675,25 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
         <button type="button" className="btn" onClick={() => onRoll('Resist Magic', checkBase(c, 'resist-magic'))}>
           Resist Magic {checkBase(c, 'resist-magic')}
         </button>
+      </section>
+      <section className="panel stack">
+        <div className="defense-row">
+          <span>
+            Spent on magic this round <strong>{spent}</strong> / {c.vigor}
+          </span>
+          <NumberField label="Sign STA (1 to 7)" value={signSta} min={1} max={7} onChange={setSignSta} />
+          <button type="button" className="btn btn-quiet" onClick={() => {
+              setSpent(0)
+              setLastCast('')
+            }}>
+            New round
+          </button>
+        </div>
+        {lastCast && <p className="pool-note">{lastCast}</p>}
+        <p className="hint">
+          Casting costs the spell's Stamina. Going over the Vigor Threshold in one round costs 5 HP per point over. Signs cost 1 to 7 Stamina,
+          your choice. (Easy Mode p. 21, errata p. 166.)
+        </p>
       </section>
       {c.spells.length === 0 && <p className="hint">No spells, signs or invocations yet.</p>}
       <div className="cards">
@@ -613,6 +714,9 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
               <TextField label="Defense" value={s.defense} onChange={(v) => upd(s.id, { defense: v })} />
             </div>
             <TextArea label="Effect" rows={2} value={s.effect} onChange={(v) => upd(s.id, { effect: v })} />
+            <button type="button" className="btn" onClick={() => cast(s.name, fixedCost(s) ?? signSta)}>
+              Cast for {fixedCost(s) ?? signSta} STA
+            </button>
             <ConfirmButton label="Remove" confirmLabel="Remove spell" onConfirm={() => set({ spells: c.spells.filter((x) => x.id !== s.id) })} />
           </div>
         ))}

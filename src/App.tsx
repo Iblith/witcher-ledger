@@ -7,7 +7,8 @@ import { CharacterCreator } from './components/CharacterCreator'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
-import { missingBestiary } from './model/bestiary'
+import { applyJournalUpdate, missingBestiary } from './model/bestiary'
+import { JOURNAL_TITLE } from './model/journalBestiary'
 import { missingNpcPack } from './model/npcPack'
 import { derived } from './model/combat'
 import { currentEntry, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
@@ -24,6 +25,7 @@ type Mode = 'players' | 'npcs' | 'encounters'
 type NpcFilter = 'all' | 'mine' | 'bestiary'
 const SEEDED_KEY = `${STORAGE_PREFIX}:bestiary-seeded`
 const NPC_PACK_KEY = `${STORAGE_PREFIX}:npc-pack-1-seeded`
+const JOURNAL_KEY = `${STORAGE_PREFIX}:journal-bestiary-seeded`
 
 function storageFlag(key: string, value?: string): string | null {
   try {
@@ -39,7 +41,9 @@ function initialCharacters(): Character[] {
   // The GM's NPC list starts with the core bestiary, once; deleted entries stay deleted
   // until the GM restores them.
   if (!IS_GM) return list
-  const withBestiary = storageFlag(SEEDED_KEY) ? list : [...list, ...missingBestiary(list)]
+  const seeded = storageFlag(SEEDED_KEY) ? list : [...list, ...missingBestiary(list)]
+  // A Witcher's Journal monsters arrived later and replace four estimates, once.
+  const withBestiary = storageFlag(JOURNAL_KEY) ? seeded : applyJournalUpdate(seeded)
   // The original NPC pack arrived after the bestiary, so it has its own once-only flag.
   return storageFlag(NPC_PACK_KEY) ? withBestiary : [...withBestiary, ...missingNpcPack(withBestiary)]
 }
@@ -61,6 +65,7 @@ export default function App() {
   useEffect(() => {
     if (IS_GM) {
       storageFlag(SEEDED_KEY, '1')
+      storageFlag(JOURNAL_KEY, '1')
       storageFlag(NPC_PACK_KEY, '1')
     }
   }, [])
@@ -104,8 +109,9 @@ export default function App() {
     setSelectedId(null)
     setShowRosterOnPhone(true)
   }
+  // A flat roll is a Save Check, where `base` is the Save value to roll under.
   const roll = (label: string, base: number, flat = false) =>
-    setRolls((r) => [flat ? rollFlat(label) : rollCheck(label, base), ...r].slice(0, 12))
+    setRolls((r) => [flat ? rollFlat(label, base) : rollCheck(label, base), ...r].slice(0, 12))
 
   return (
     <div className={'app' + (showRosterOnPhone ? ' phone-roster' : ' phone-sheet')}>
@@ -336,6 +342,21 @@ export default function App() {
 
 function BestiaryNote({ c, onChange }: { c: Character; onChange: (c: Character) => void }) {
   const b = c.bestiary!
+  if (b.source === 'journal')
+    return (
+      <section className="panel bestiary-note bestiary-checked">
+        <div className="bestiary-head">
+          <strong>
+            {b.category} · {b.threat} · {JOURNAL_TITLE} p. {b.page}
+          </strong>
+          <span className="sev-pill sev-simple">From the book</span>
+        </div>
+        <p className="hint">
+          Stats, skill bases, armor and attacks are copied from {JOURNAL_TITLE}. Abilities are listed by name only, so read their rules on
+          that page.
+        </p>
+      </section>
+    )
   return (
     <section className={'panel bestiary-note' + (b.checked ? ' bestiary-checked' : '')}>
       <div className="bestiary-head">
@@ -348,7 +369,7 @@ function BestiaryNote({ c, onChange }: { c: Character; onChange: (c: Character) 
       <p className="hint">
         {b.checked
           ? 'You marked these stats as checked against your book.'
-          : 'These numbers are estimates, not copied from the core rulebook. Compare them with your book and fix anything that differs.'}
+          : 'These numbers are estimates, not copied from the core rulebook (which this app has no copy of). Compare them with your book and fix anything that differs.'}
       </p>
       {b.confirmed && <p className="hint">Confirmed by the errata: {b.confirmed}</p>}
       <label className="check">
@@ -378,6 +399,7 @@ function RollLog({ rolls, onClear }: { rolls: CheckRoll[]; onClear: () => void }
             {describeDice(latest)}
             {latest.outcome === 'critical' && ' · 10 exploded'}
             {latest.outcome === 'fumble' && ' · fumble'}
+            {latest.save && (latest.save.passed ? ` · saved (under ${latest.save.target})` : ` · failed (needed under ${latest.save.target})`)}
           </span>
         </span>
         <button type="button" className="btn-chip" onClick={onClear}>
@@ -389,7 +411,10 @@ function RollLog({ rolls, onClear }: { rolls: CheckRoll[]; onClear: () => void }
           {older.map((r) => (
             <li key={r.at + r.label} className={'roll-' + r.outcome}>
               <span>{r.label}</span>
-              <span className="roll-small">{r.total}</span>
+              <span className="roll-small">
+                {r.total}
+                {r.save ? (r.save.passed ? ' ✓' : ' ✗') : ''}
+              </span>
             </li>
           ))}
         </ol>

@@ -31,6 +31,48 @@ export function statForSkill(c: Character, skillId: string): StatKey | undefined
   return SKILL_BY_ID[skillId]?.stat ?? c.customSkills.find((k) => k.id === skillId)?.stat
 }
 
+// Recovery (Easy Mode p. 18; errata p. 48, 151). A Recover action in combat restores REC Stamina.
+// Resting restores REC Stamina per hour, halved if any of that hour was strenuous.
+export function recoverAction(c: Character): Partial<Character> {
+  const d = derived(c)
+  return { sta: { ...c.sta, current: Math.min(d.maxSta, c.sta.current + d.rec) } }
+}
+
+export function restHour(c: Character, strenuous: boolean): Partial<Character> {
+  const d = derived(c)
+  const gain = strenuous ? Math.floor(d.rec / 2) : d.rec
+  return { sta: { ...c.sta, current: Math.min(d.maxSta, c.sta.current + gain) } }
+}
+
+// HP only returns once a DC:10 First Aid check has treated the patient: REC per day of rest, halved
+// for a strenuous day, +3 a day if a Doctor's Healing Hands began the treatment.
+export function restDay(c: Character, strenuous: boolean, healingHands: boolean): Partial<Character> {
+  const d = derived(c)
+  const gain = (strenuous ? Math.floor(d.rec / 2) : d.rec) + (healingHands ? 3 : 0)
+  return { hp: { ...c.hp, current: Math.min(d.maxHp, c.hp.current + gain) } }
+}
+
+// Casting (Easy Mode p. 21, errata p. 166): every spell or Sign costs Stamina. Once the round's total
+// cost passes the Vigor Threshold, each point over it costs 5 HP. `spentThisRound` is the total before
+// this cast; the result says what this cast added.
+export function castSpell(c: Character, cost: number, spentThisRound: number): { patch: Partial<Character>; spent: number; hpLoss: number } {
+  const spent = spentThisRound + cost
+  const over = (n: number) => Math.max(0, n - c.vigor)
+  const hpLoss = 5 * (over(spent) - over(spentThisRound))
+  return {
+    patch: { sta: { ...c.sta, current: c.sta.current - cost }, hp: { ...c.hp, current: c.hp.current - hpLoss } },
+    spent,
+    hpLoss,
+  }
+}
+
+// The leading number of a spell's STA cost text ("5", "3 per round"), or null for a range ("1-7"),
+// "Varies", or anything else the caster chooses.
+export function staCostNumber(text: string): number | null {
+  const m = text.trim().match(/^(\d+)(?!\s*[-–to]+\s*\d)/)
+  return m ? Number(m[1]) : null
+}
+
 export function carriedWeight(c: Character): number {
   return Math.round(c.items.reduce((sum, i) => sum + i.qty * i.weight, 0) * 10) / 10
 }

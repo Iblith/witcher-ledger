@@ -1,13 +1,16 @@
 import { HIT_LOCATIONS, type Stats } from '../rules/rules'
 import { newCharacter, uid } from './factory'
+import { journalCharacter, JOURNAL_MONSTERS } from './journalBestiary'
 import type { Character } from './types'
 
-// Creatures from the core rulebook bestiary, used to seed the GM's NPC list.
+// Creatures from the core rulebook bestiary, used to seed the GM's NPC list alongside the
+// A Witcher's Journal monsters (journalBestiary.ts).
 //
-// The only rulebook source in this project is the v4 errata, so the numbers below are estimates
-// for play, not the book's stat blocks. `confirmed` lists what the errata itself says about a
-// creature (and `page` is set only where the errata cites one). GMs check each entry against
-// their book and correct it on the sheet.
+// The core rulebook is not in the project, so the numbers below are ESTIMATES for play, not the
+// book's stat blocks. `confirmed` lists what the v4 errata itself says about a creature (and `page`
+// is set only where the errata cites one). GMs check each entry against their book and correct it
+// on the sheet. Creatures the Journal covers (bear, harpy, leshen, troll) were dropped from this
+// list in favour of the Journal's stat blocks; see RETIRED_ESTIMATES.
 
 interface Attack {
   name: string
@@ -136,23 +139,6 @@ export const BESTIARY: BestiaryDef[] = [
     weaknesses: 'Ogroid oil; Dancing Star bombs on their burrows.',
   },
   {
-    name: 'Rock troll',
-    category: 'Ogroid',
-    threat: 'Medium, Complex',
-    confirmed: 'The errata renames the troll crafting component to Troll Hide.',
-    stats: [3, 5, 4, 12, 5, 3, 3, 6, 0],
-    hp: 70,
-    sta: 70,
-    sp: 10,
-    skills: { melee: 5, brawling: 6, 'dodge-escape': 2, physique: 8, awareness: 3 },
-    attacks: [
-      { name: 'Fist', skill: 'brawling', damage: '4d6', effect: 'Knockdown' },
-      { name: 'Thrown rock', skill: 'athletics', damage: '3d6', range: '20m' },
-    ],
-    abilities: 'Stone skin. Can be talked to.',
-    weaknesses: 'Ogroid oil; Yrden.',
-  },
-  {
     name: 'Noonwraith',
     category: 'Specter',
     threat: 'Medium, Difficult',
@@ -208,19 +194,6 @@ export const BESTIARY: BestiaryDef[] = [
     ],
     abilities: 'Regenerates each round; howl to call wolves.',
     weaknesses: 'Cursed oil; Moon Dust stops regeneration.',
-  },
-  {
-    name: 'Harpy',
-    category: 'Hybrid',
-    threat: 'Easy, Simple',
-    stats: [2, 7, 5, 3, 8, 1, 1, 3, 0],
-    hp: 20,
-    sta: 20,
-    sp: 0,
-    skills: { melee: 5, 'dodge-escape': 6, awareness: 5, athletics: 5 },
-    attacks: [{ name: 'Talons', skill: 'melee', damage: '2d6', effect: 'ROF 2' }],
-    abilities: 'Flight; steals shiny objects.',
-    weaknesses: 'Hybrid oil; Aard grounds it; Grapeshot.',
   },
   {
     name: 'Siren',
@@ -319,22 +292,6 @@ export const BESTIARY: BestiaryDef[] = [
     weaknesses: 'Relict oil; Samum bombs blind its eye.',
   },
   {
-    name: 'Leshen',
-    category: 'Relict',
-    threat: 'Hard, Difficult',
-    stats: [8, 7, 5, 10, 6, 3, 3, 10, 0],
-    hp: 100,
-    sta: 100,
-    sp: 8,
-    skills: { melee: 7, 'dodge-escape': 5, awareness: 8, 'spell-casting': 10, 'resist-magic': 8, stealth: 8 },
-    attacks: [
-      { name: 'Claws', skill: 'melee', damage: '4d6', effect: 'ROF 2' },
-      { name: 'Root strike', skill: 'spell-casting', damage: '3d6', range: '10m' },
-    ],
-    abilities: 'Commands wolves and crows; marks a villager and returns while they live.',
-    weaknesses: 'Relict oil; Dragon’s Dream and Igni.',
-  },
-  {
     name: 'Katakan',
     category: 'Vampire',
     threat: 'Hard, Complex',
@@ -412,22 +369,6 @@ export const BESTIARY: BestiaryDef[] = [
     abilities: 'Keen smell.',
     weaknesses: 'Beasts take full damage from steel (no silver needed).',
   },
-  {
-    name: 'Bear',
-    category: 'Beast',
-    threat: 'Medium, Simple',
-    stats: [2, 5, 4, 10, 5, 2, 1, 5, 0],
-    hp: 60,
-    sta: 60,
-    sp: 3,
-    skills: { melee: 5, brawling: 5, 'dodge-escape': 2, awareness: 5, physique: 7 },
-    attacks: [
-      { name: 'Claws', skill: 'melee', damage: '3d6+2', effect: 'ROF 2' },
-      { name: 'Bite', skill: 'melee', damage: '3d6' },
-    ],
-    abilities: 'Grapples and mauls.',
-    weaknesses: 'Beasts take full damage from steel (no silver needed).',
-  },
 ]
 
 export const BESTIARY_CATEGORIES = [...new Set(BESTIARY.map((b) => b.category))]
@@ -471,8 +412,24 @@ export function bestiaryCharacter(b: BestiaryDef): Character {
   return c
 }
 
+// Estimated entries replaced by A Witcher's Journal stat blocks.
+export const RETIRED_ESTIMATES = ['Bear', 'Harpy', 'Leshen', 'Rock troll'].map(bestiaryId)
+
+export function allBestiary(): Character[] {
+  return [...JOURNAL_MONSTERS.map(journalCharacter), ...BESTIARY.map(bestiaryCharacter)]
+}
+
 // Bestiary entries the GM's list doesn't have (never seeded, or deleted since).
 export function missingBestiary(characters: Character[]): Character[] {
   const have = new Set(characters.map((c) => c.id))
-  return BESTIARY.filter((b) => !have.has(bestiaryId(b.name))).map(bestiaryCharacter)
+  return allBestiary().filter((c) => !have.has(c.id))
+}
+
+// One-time update for GMs whose list was seeded before the Journal arrived: adds the Journal
+// monsters and drops the retired estimates, unless the GM ticked or edited them.
+export function applyJournalUpdate(characters: Character[]): Character[] {
+  const retired = new Set(RETIRED_ESTIMATES)
+  const kept = characters.filter((c) => !(retired.has(c.id) && c.bestiary && !c.bestiary.checked && c.updatedAt === c.createdAt))
+  const have = new Set(kept.map((c) => c.id))
+  return [...kept, ...JOURNAL_MONSTERS.map(journalCharacter).filter((c) => !have.has(c.id))]
 }

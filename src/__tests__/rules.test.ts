@@ -4,7 +4,7 @@ import { derive, PROFESSIONS, SKILL_BY_ID, type Stats } from '../rules/rules'
 import { homeLanguageSkill, PROFESSION_GEAR, professionSkillIds, STARTING_GEAR_NOTE } from '../model/presets'
 import { addToCharacter, CATALOG, findEntry, hasOnCharacter, removeFromCharacter, search } from '../model/catalog'
 import { checkBase, derived, toCombatant } from '../model/combat'
-import { BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
+import { allBestiary, BESTIARY, bestiaryCharacter, missingBestiary } from '../model/bestiary'
 import { newCharacter, sampleCharacters } from '../model/factory'
 import { exportJson, LocalStorageRepository, parseCharacters } from '../storage/store'
 
@@ -198,7 +198,7 @@ describe('bestiary', () => {
   })
 
   it('restores only missing entries and adds fight copies that never write back', () => {
-    const all = BESTIARY.map(bestiaryCharacter)
+    const all = allBestiary()
     expect(missingBestiary(all)).toHaveLength(0)
     expect(missingBestiary(all.slice(1)).map((c) => c.name)).toEqual([all[0].name])
     const ghoul = all.find((c) => c.name === 'Ghoul')!

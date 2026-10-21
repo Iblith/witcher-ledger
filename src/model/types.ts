@@ -80,13 +80,15 @@ export interface Spell {
   effect: string
 }
 
-// Where a GM's NPC came from when it was seeded from the core rulebook bestiary.
+// Where a GM's NPC came from when it was seeded from a bestiary.
 export interface BestiaryInfo {
   category: string
   threat: string
-  // Core rulebook page, only where the errata cites one.
+  // 'journal': copied from A Witcher's Journal. Missing: an estimate of a core rulebook creature.
+  source?: 'journal'
+  // Journal page, or the core rulebook page where the errata cites one.
   page: number | null
-  // What the v4 errata confirms about this creature. Everything else is an estimate.
+  // What the v4 errata confirms about an estimated creature. Everything else is an estimate.
   confirmed: string
   // The GM ticks this once they have compared the stats with their book.
   checked: boolean
