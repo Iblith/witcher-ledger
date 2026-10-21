@@ -6,9 +6,9 @@ import { PROFESSIONS, RACES, SKILL_BY_ID } from '../rules/rules'
 describe('original NPC pack', () => {
   const pack = missingNpcPack([])
 
-  it('loads 30 GM NPCs with unique ids', () => {
-    expect(pack).toHaveLength(30)
-    expect(new Set(pack.map((c) => c.id)).size).toBe(30)
+  it('loads the 4 pack NPCs the campaign uses, with unique ids', () => {
+    expect(pack).toHaveLength(4)
+    expect(new Set(pack.map((c) => c.id)).size).toBe(4)
     for (const c of pack) expect(c.kind).toBe('npc')
   })
 

@@ -4,10 +4,12 @@ import {
   applyDamage,
   CONDITION_HELP,
   CONDITIONS,
+  duplicateEntry,
   entryFromCharacter,
   entriesFromTemplate,
   entryState,
   monsterEntries,
+  partyEntries,
   recoverStamina,
   rollHitLocation,
   spendStamina,
@@ -16,7 +18,10 @@ import {
   type Encounter,
   type EncounterEntry,
   type MonsterInput,
+  type PartyMember,
 } from '../model/encounter'
+import { uid } from '../model/factory'
+import { LocalPartyRepository } from '../storage/store'
 import type { Character } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
@@ -25,6 +30,7 @@ import type { CritSeverity } from '../model/types'
 
 const SP_SHORT: Record<HitLocation, string> = { head: 'H', torso: 'T', rArm: 'RA', lArm: 'LA', rLeg: 'RL', lLeg: 'LL' }
 const STATE_LABEL = { ok: '', wounded: 'Wounded', dying: 'Death state', defeated: 'Out' } as const
+const partyRepo = new LocalPartyRepository()
 
 export interface TrackerProps {
   encounter: Encounter
@@ -40,12 +46,27 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
   // Remembers which version of the fight was saved, so a new hit shows the button again.
   const [savedEntries, setSavedEntries] = useState<EncounterEntry[] | null>(null)
   const wroteBack = savedEntries === e.entries
+  const [party, setPartyState] = useState<PartyMember[]>(() => partyRepo.load())
+  const setParty = (p: PartyMember[]) => {
+    setPartyState(p)
+    partyRepo.save(p)
+  }
   const order = turnOrder(e)
   const linked = e.entries.filter((x) => x.characterId).length
+  const partyToAdd = partyEntries(party, e.entries)
+  const waiting = e.entries.filter((x) => x.playerRolls && x.initiative === null)
+  const cleared = e.entries.filter((x) => x.defeated && !x.characterId && !x.nameOnly)
+  const upNextId = e.activeId ? advanceTurn(e, 1).activeId : null
 
   const log = (line: string, next: Encounter) => ({ ...next, log: [`R${next.round}: ${line}`, ...next.log].slice(0, 60) })
   const updEntry = (id: string, patch: Partial<EncounterEntry>) =>
     onChange({ ...e, entries: e.entries.map((x) => (x.id === id ? { ...x, ...patch } : x)) })
+  const addEntries = (entries: EncounterEntry[]) =>
+    onChange(log(`${entries.map((x) => x.name).join(', ')} joined`, { ...e, entries: [...e.entries, ...entries] }))
+  const nextTurn = (dir: 1 | -1) => {
+    const next = advanceTurn(e, dir)
+    onChange(next.round > e.round ? log(`Round ${next.round} begins`, next) : next)
+  }
 
   return (
     <div className="tracker">
@@ -61,23 +82,47 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
         <button type="button" className="btn" onClick={() => onChange(log('Rolled initiative', rollInitiative(e)))} disabled={e.entries.length === 0}>
           Roll initiative
         </button>
-        {e.entries.some((x) => x.initiative === null) && e.entries.some((x) => x.initiative !== null) && (
+        {e.entries.some((x) => x.initiative === null && !x.playerRolls) && e.entries.some((x) => x.initiative !== null) && (
           <button type="button" className="btn" onClick={() => onChange(rollInitiative(e, true))}>
             Roll for newcomers
           </button>
         )}
+        {partyToAdd.length > 0 && (
+          <button
+            type="button"
+            className="btn"
+            title={`Add ${partyToAdd.map((x) => x.name).join(', ')}`}
+            onClick={() => addEntries(partyToAdd)}
+          >
+            Add party ({partyToAdd.length})
+          </button>
+        )}
         <span className="toolbar-spacer" />
-        <button type="button" className="btn btn-quiet" onClick={() => onChange(advanceTurn(e, -1))} disabled={!e.activeId}>
+        <button type="button" className="btn btn-quiet" onClick={() => nextTurn(-1)} disabled={!e.activeId}>
           Previous
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => onChange(advanceTurn(e, 1))} disabled={e.entries.length === 0}>
+        <button type="button" className="btn btn-primary" onClick={() => nextTurn(1)} disabled={e.entries.length === 0}>
           {e.activeId ? 'Next turn' : 'Start fight'}
         </button>
       </div>
 
+      {waiting.length > 0 && (
+        <PlayerRolls
+          key={waiting.map((x) => x.id).join()}
+          waiting={waiting}
+          onSet={(rolls) => {
+            const entries = e.entries.map((x) => (x.id in rolls ? { ...x, initiative: rolls[x.id] } : x))
+            onChange(log(`Player rolls: ${waiting.filter((x) => x.id in rolls).map((x) => `${x.name} ${rolls[x.id]}`).join(', ')}`, { ...e, entries }))
+          }}
+        />
+      )}
+
       {e.entries.length === 0 ? (
         <div className="panel">
-          <p className="hint">No one is in this fight yet. Add characters from your roster or quick-add monsters.</p>
+          <p className="hint">
+            No one is in this fight yet. {party.length > 0 ? 'Add your party with one tap above, then add' : 'Add your party by name, then add'} NPCs,
+            creatures from the bestiary or quick monsters with Add combatants.
+          </p>
         </div>
       ) : (
         <ol className="turn-list">
@@ -86,6 +131,7 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
               key={x.id}
               x={x}
               active={x.id === e.activeId}
+              upNext={x.id === upNextId && upNextId !== e.activeId}
               damageOpen={damageFor === x.id}
               onToggleDamage={() => setDamageFor(damageFor === x.id ? null : x.id)}
               onChange={(patch) => updEntry(x.id, patch)}
@@ -97,6 +143,7 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
               onRemove={() =>
                 onChange({ ...e, entries: e.entries.filter((y) => y.id !== x.id), activeId: e.activeId === x.id ? null : e.activeId })
               }
+              onDuplicate={() => addEntries([duplicateEntry(x, e.entries)])}
               onRoll={onRoll}
             />
           ))}
@@ -108,6 +155,24 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
           Add combatants
         </button>
         <span className="toolbar-spacer" />
+        {cleared.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-quiet"
+            title="Remove defeated monsters and NPC copies. Players and linked sheets stay."
+            onClick={() =>
+              onChange(
+                log(`Cleared ${cleared.map((x) => x.name).join(', ')}`, {
+                  ...e,
+                  entries: e.entries.filter((x) => !cleared.includes(x)),
+                  activeId: cleared.some((x) => x.id === e.activeId) ? null : e.activeId,
+                }),
+              )
+            }
+          >
+            Clear defeated ({cleared.length})
+          </button>
+        )}
         {linked > 0 && (
           <button
             type="button"
@@ -152,10 +217,12 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
       {adding && (
         <AddDialog
           characters={characters}
-          already={new Set(e.entries.map((x) => x.characterId).filter(Boolean) as string[])}
+          entries={e.entries}
+          party={party}
+          onPartyChange={setParty}
           onClose={() => setAdding(false)}
           onAdd={(entries) => {
-            onChange(log(`${entries.map((x) => x.name).join(', ')} joined`, { ...e, entries: [...e.entries, ...entries] }))
+            addEntries(entries)
             setAdding(false)
           }}
         />
@@ -167,14 +234,17 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
 function EntryRow(props: {
   x: EncounterEntry
   active: boolean
+  upNext: boolean
   damageOpen: boolean
   onToggleDamage: () => void
   onChange: (patch: Partial<EncounterEntry>) => void
   onDamage: (r: ReturnType<typeof applyDamage>) => void
   onRemove: () => void
+  onDuplicate: () => void
   onRoll: TrackerProps['onRoll']
 }) {
   const { x } = props
+  const [showConds, setShowConds] = useState(false)
   const state = entryState(x)
   const pct = x.hp.max > 0 ? Math.max(0, Math.min(100, (x.hp.current / x.hp.max) * 100)) : 0
   const staPct = x.sta.max > 0 ? Math.max(0, Math.min(100, (x.sta.current / x.sta.max) * 100)) : 0
@@ -190,7 +260,7 @@ function EntryRow(props: {
           placeholder="–"
           onChange={(ev) => props.onChange({ initiative: ev.target.value === '' ? null : Number(ev.target.value) })}
         />
-        <span className="entry-ref">REF {x.initiativeBase}</span>
+        <span className="entry-ref">{x.playerRolls ? 'own roll' : `REF ${x.initiativeBase}`}</span>
       </div>
 
       <div className="entry-main">
@@ -198,8 +268,22 @@ function EntryRow(props: {
           <input className="entry-name" aria-label="Combatant name" value={x.name} onChange={(ev) => props.onChange({ name: ev.target.value })} />
           <span className={'kind-pill kind-' + x.kind}>{x.kind === 'pc' ? 'Player' : x.kind === 'npc' ? 'NPC' : 'Monster'}</span>
           {STATE_LABEL[state] && <span className={'state-pill state-' + state}>{STATE_LABEL[state]}</span>}
+          {props.upNext && <span className="state-pill state-next">Up next</span>}
+          {x.conditions.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className="cond cond-on"
+              title={`${CONDITION_HELP[c as (typeof CONDITIONS)[number]] ?? ''} Click to clear.`}
+              onClick={() => props.onChange({ conditions: x.conditions.filter((y) => y !== c) })}
+            >
+              {c} ×
+            </button>
+          ))}
         </div>
 
+        {!x.nameOnly && (
+        <>
         <div className="entry-pools">
           <div className="mini-pool mini-hp">
             <span className="field-label">HP</span>
@@ -265,6 +349,8 @@ function EntryRow(props: {
         </div>
 
         {props.damageOpen && <DamageForm x={x} onApply={props.onDamage} />}
+        </>
+        )}
 
         {(x.injuries ?? []).length > 0 && (
           <ul className="entry-injuries">
@@ -285,6 +371,10 @@ function EntryRow(props: {
           </ul>
         )}
 
+        <button type="button" className="btn-chip cond-toggle" aria-expanded={showConds} onClick={() => setShowConds(!showConds)}>
+          {showConds ? 'Hide conditions' : 'Conditions'}
+        </button>
+        {showConds && (
         <div className="conditions">
           {CONDITIONS.map((c) => {
             const on = x.conditions.includes(c)
@@ -302,6 +392,7 @@ function EntryRow(props: {
             )
           })}
         </div>
+        )}
         {x.notes && <p className="hint">{x.notes}</p>}
       </div>
 
@@ -310,6 +401,11 @@ function EntryRow(props: {
           <input type="checkbox" checked={x.defeated} onChange={(ev) => props.onChange({ defeated: ev.target.checked })} />
           Out
         </label>
+        {!x.nameOnly && (
+          <button type="button" className="btn btn-quiet" title="Add another copy at full health" onClick={props.onDuplicate}>
+            +1 copy
+          </button>
+        )}
         <ConfirmButton label="Remove" confirmLabel="Remove" onConfirm={props.onRemove} />
       </div>
     </li>
@@ -405,91 +501,233 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
   )
 }
 
+// The players' own initiative rolls, typed in together. Numbers are kept here until Set, so an
+// entry doesn't jump around the turn order while the GM is still typing.
+function PlayerRolls({ waiting, onSet }: { waiting: EncounterEntry[]; onSet: (rolls: Record<string, number>) => void }) {
+  const [draft, setDraft] = useState<Record<string, string>>({})
+  const rolls = Object.fromEntries(
+    Object.entries(draft)
+      .filter(([, v]) => v.trim() !== '' && Number.isFinite(Number(v)))
+      .map(([k, v]) => [k, Number(v)]),
+  )
+  const filled = Object.keys(rolls).length
+  return (
+    <form
+      className="panel player-rolls"
+      onSubmit={(ev) => {
+        ev.preventDefault()
+        if (filled) onSet(rolls)
+      }}
+    >
+      <h2 className="panel-title">Players' initiative</h2>
+      <p className="hint">Ask each player for their initiative roll (REF + 1d10) and type it in. Roll initiative never overwrites these.</p>
+      <div className="player-rolls-grid">
+        {waiting.map((x) => (
+          <label className="field" key={x.id}>
+            <span className="field-label">{x.name}</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              className="num"
+              value={draft[x.id] ?? ''}
+              placeholder="–"
+              onChange={(ev) => setDraft({ ...draft, [x.id]: ev.target.value })}
+            />
+          </label>
+        ))}
+      </div>
+      <div>
+        <button type="submit" className="btn btn-primary" disabled={!filled}>
+          {filled === waiting.length || !filled ? 'Set rolls' : `Set ${filled} of ${waiting.length}`}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 const BLANK_MONSTER: MonsterInput = { name: '', count: 1, hp: 20, sta: 20, ref: 6, sp: 0, headSp: 0, dodge: 10, attack: 12, damage: '2d6', notes: '' }
 
 function AddDialog(props: {
   characters: Character[]
-  already: Set<string>
+  entries: EncounterEntry[]
+  party: PartyMember[]
+  onPartyChange: (p: PartyMember[]) => void
   onClose: () => void
   onAdd: (entries: EncounterEntry[]) => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [m, setM] = useState<MonsterInput>(BLANK_MONSTER)
-  const beasts = props.characters.filter((c) => c.bestiary).sort((a, b) => a.bestiary!.category.localeCompare(b.bestiary!.category) || a.name.localeCompare(b.name))
-  const [beastId, setBeastId] = useState(beasts[0]?.id ?? '')
-  const [beastCount, setBeastCount] = useState(1)
-  const beast = beasts.find((c) => c.id === beastId)
+  const [newName, setNewName] = useState('')
+  const already = new Set(props.entries.map((x) => x.characterId).filter(Boolean) as string[])
+  const partyToAdd = partyEntries(props.party, props.entries)
+  // Any NPC sheet can be added as copies: the GM's own and campaign NPCs first, then the bestiary.
+  const npcs = props.characters.filter((c) => c.kind === 'npc')
+  const mine = npcs.filter((c) => !c.bestiary).sort((a, b) => a.name.localeCompare(b.name))
+  const beasts = npcs.filter((c) => c.bestiary).sort((a, b) => a.bestiary!.category.localeCompare(b.bestiary!.category) || a.name.localeCompare(b.name))
+  const [templateId, setTemplateId] = useState(mine[0]?.id ?? beasts[0]?.id ?? '')
+  const [templateCount, setTemplateCount] = useState(1)
+  const template = npcs.find((c) => c.id === templateId)
   useEffect(() => {
     if (ref.current && !ref.current.open) ref.current.showModal()
   }, [])
   const setMon = (patch: Partial<MonsterInput>) => setM({ ...m, ...patch })
-  const available = props.characters.filter((c) => !c.bestiary).sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+  const setMember = (id: string, patch: Partial<PartyMember>) => props.onPartyChange(props.party.map((p) => (p.id === id ? { ...p, ...patch } : p)))
+  const addMember = () => {
+    const name = newName.trim()
+    if (!name) return
+    props.onPartyChange([...props.party, { id: uid(), name, ref: null }])
+    setNewName('')
+  }
+  const pcs = props.characters.filter((c) => c.kind === 'pc').sort((a, b) => a.name.localeCompare(b.name))
   return (
     <dialog ref={ref} className="dialog dialog-wide" onClose={props.onClose}>
       <h2>Add combatants</h2>
       <section className="stack">
-        <h3 className="panel-title">Players and your NPCs</h3>
-        {available.length === 0 && <p className="hint">No players or NPCs yet.</p>}
-        <ul className="pick-list">
-          {available.map((c) => (
-            <li key={c.id}>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={picked.has(c.id)}
-                  onChange={(ev) => {
-                    const next = new Set(picked)
-                    if (ev.target.checked) next.add(c.id)
-                    else next.delete(c.id)
-                    setPicked(next)
-                  }}
-                />
-                {c.name}
-                <span className={'kind-pill kind-' + c.kind}>{c.kind === 'pc' ? 'Player' : 'NPC'}</span>
-                {props.already.has(c.id) && <span className="hint">already in</span>}
-              </label>
-            </li>
-          ))}
-        </ul>
+        <h3 className="panel-title">Your party</h3>
+        <p className="hint">
+          Player names only, kept for every fight. Leave REF empty and the player rolls their own initiative; fill it in and Roll initiative rolls for them.
+        </p>
+        {props.party.length > 0 && (
+          <ul className="party-list">
+            {props.party.map((p) => (
+              <li key={p.id}>
+                <input className="party-name" aria-label="Player name" value={p.name} onChange={(ev) => setMember(p.id, { name: ev.target.value })} />
+                <label className="party-ref">
+                  <span className="field-label">REF</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="num"
+                    aria-label={`${p.name} REF`}
+                    value={p.ref ?? ''}
+                    placeholder="–"
+                    onChange={(ev) => setMember(p.id, { ref: ev.target.value === '' ? null : Number(ev.target.value) })}
+                  />
+                </label>
+                <button type="button" className="icon-btn" aria-label={`Remove ${p.name} from the party`} onClick={() => props.onPartyChange(props.party.filter((y) => y.id !== p.id))}>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form
+          className="party-add"
+          onSubmit={(ev) => {
+            ev.preventDefault()
+            addMember()
+          }}
+        >
+          <input aria-label="New player name" value={newName} placeholder="Player or character name" onChange={(ev) => setNewName(ev.target.value)} />
+          <button type="submit" className="btn" disabled={!newName.trim()}>
+            Add name
+          </button>
+        </form>
         <div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={picked.size === 0}
-            onClick={() => props.onAdd(props.characters.filter((c) => picked.has(c.id)).map(entryFromCharacter))}
-          >
-            Add {picked.size || ''} selected
+          <button type="button" className="btn btn-primary" disabled={partyToAdd.length === 0} onClick={() => props.onAdd(partyToAdd)}>
+            {props.party.length > 0 && partyToAdd.length === 0 ? 'Whole party is in the fight' : `Add whole party to initiative${partyToAdd.length ? ` (${partyToAdd.length})` : ''}`}
           </button>
         </div>
       </section>
-      {beasts.length > 0 && (
+      {pcs.length > 0 && (
         <>
           <hr className="rule" />
           <section className="stack">
-            <h3 className="panel-title">From the bestiary</h3>
+            <h3 className="panel-title">Imported player sheets</h3>
+            <p className="hint">Full sheets: their wounds can be saved back after the fight.</p>
+            <ul className="pick-list">
+              {pcs.map((c) => (
+                <li key={c.id}>
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(c.id)}
+                      onChange={(ev) => {
+                        const next = new Set(picked)
+                        if (ev.target.checked) next.add(c.id)
+                        else next.delete(c.id)
+                        setPicked(next)
+                      }}
+                    />
+                    {c.name}
+                    {already.has(c.id) && <span className="hint">already in</span>}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={picked.size === 0}
+                onClick={() => props.onAdd(props.characters.filter((c) => picked.has(c.id)).map(entryFromCharacter))}
+              >
+                Add {picked.size || ''} selected
+              </button>
+            </div>
+          </section>
+        </>
+      )}
+      {npcs.length > 0 && (
+        <>
+          <hr className="rule" />
+          <section className="stack">
+            <h3 className="panel-title">NPCs and the bestiary</h3>
             <div className="card-fields">
               <label className="field">
-                <span className="field-label">Creature</span>
-                <select value={beastId} onChange={(ev) => setBeastId(ev.target.value)}>
-                  {beasts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.bestiary!.category})
-                    </option>
-                  ))}
+                <span className="field-label">Who</span>
+                <select value={templateId} onChange={(ev) => setTemplateId(ev.target.value)}>
+                  {mine.length > 0 && (
+                    <optgroup label="Your NPCs">
+                      {mine.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {beasts.length > 0 && (
+                    <optgroup label="Bestiary">
+                      {beasts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.bestiary!.category})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </label>
-              <NumberField label="How many" value={beastCount} min={1} max={20} onChange={setBeastCount} />
+              <NumberField label="How many" value={templateCount} min={1} max={20} onChange={setTemplateCount} />
             </div>
-            {beast && (
+            {template && (
               <p className="hint">
-                {beast.bestiary!.threat} · HP {beast.hp.maxOverride ?? beast.hp.current} · {beast.bestiary!.source === 'journal' ? `A Witcher's Journal p. ${beast.bestiary!.page}` : beast.bestiary!.checked ? 'Checked against the book' : 'Estimated stats, not yet checked against the book'}
+                {template.bestiary
+                  ? `${template.bestiary.threat} · HP ${template.hp.maxOverride ?? template.hp.current} · ${template.bestiary.source === 'journal' ? `A Witcher's Journal p. ${template.bestiary.page}` : template.bestiary.checked ? 'Checked against the book' : 'Estimated stats, not yet checked against the book'}`
+                  : `${template.notes.split('\n')[0]} · HP ${template.hp.maxOverride ?? template.hp.current}`}
               </p>
             )}
-            <div>
-              <button type="button" className="btn btn-primary" disabled={!beast} onClick={() => beast && props.onAdd(entriesFromTemplate(beast, beastCount))}>
-                Add {beastCount > 1 ? `${beastCount} ${beast?.name ?? ''}` : beast?.name ?? ''}
+            <p className="hint">Added as copies: their damage never touches the sheet.</p>
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!template}
+                onClick={() => template && props.onAdd(entriesFromTemplate(template, templateCount, props.entries.map((x) => x.name)))}
+              >
+                Add {templateCount > 1 ? `${templateCount} × ${template?.name ?? ''}` : template?.name ?? ''}
               </button>
+              {template && !template.bestiary && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={already.has(template.id)}
+                  title="Adds the sheet itself, so its wounds can be saved back after the fight"
+                  onClick={() => props.onAdd([entryFromCharacter(template)])}
+                >
+                  {already.has(template.id) ? 'Sheet already in' : 'Add the sheet (keeps wounds)'}
+                </button>
+              )}
             </div>
           </section>
         </>

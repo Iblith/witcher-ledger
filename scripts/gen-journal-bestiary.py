@@ -2,13 +2,14 @@
 
 Usage: python3 -I scripts/gen-journal-bestiary.py <A_Witchers_Journal.txt> src/model/journalBestiary.data.ts
 
-The text file is in the project's shared rules folder, not in this repo. Exceptional monsters
-(true dragons, higher vampires) are skipped: the book builds those from tables.
+The text file is in the project's shared rules folder, not in this repo. The two exceptional
+monsters (true dragon, higher vampire) come last. Their base stat blocks are included; the book's
+tables for customising them (age, type, life events) are not.
 """
 import re, json, sys
 lines = [l.rstrip() for l in open(sys.argv[1], encoding='utf-8')]
 sup = [i for i, l in enumerate(lines) if l.startswith('Commoner Superstition (Education DC')]
-CATS = ['Necrophage']*3 + ['Specter']*3 + ['Beast']*3 + ['Cursed One']*3 + ['Hybrid']*3 + ['Insectoid']*3 + ['Elementa']*3 + ['Relict']*3 + ['Ogroid']*3 + ['Draconid']*3 + ['Vampire']*3
+CATS = ['Necrophage']*3 + ['Specter']*3 + ['Beast']*3 + ['Cursed One']*3 + ['Hybrid']*3 + ['Insectoid']*3 + ['Elementa']*3 + ['Relict']*3 + ['Ogroid']*3 + ['Draconid']*3 + ['Vampire']*3 + ['Draconid', 'Vampire']
 STATS = ['INT','REF','DEX','BODY','SPD','EMP','CRA','WILL','STUN','RUN','LEAP','STA','ENC','REC','HP']
 out = []
 for n, s in enumerate(sup):
@@ -72,12 +73,14 @@ for n, s in enumerate(sup):
         i += k
     m['attacks'] = atks
     m['unparsed_after_attacks'] = blk[i][:80]
-    m['abilities'] = [l.split(':', 1)[1].strip() for l in blk if re.match(r'^(Ability|Alternate Form): ', l)]
+    m['abilities'] = [l.split(':', 1)[1].strip() for l in blk if re.match(r'^(Ability|Alternate Form|Transformation): ', l)]
+    # The true dragon's abilities are bare headings rather than "Ability: X" lines.
+    if not m['abilities']: m['abilities'] = [l for l in ('Flight', 'Telepathy', 'Breath', 'Pounce') if l in blk]
     m['lore_dc'] = next((l for l in blk if l.startswith('Lore & Behavior')), '')
     out.append(m)
 
 out = [m for m in out if m['category'] != '?']
-assert len(out) == 33, len(out)
+assert len(out) == 35, len(out)
 def ts(v): return json.dumps(v, ensure_ascii=False)
 rows = []
 for m in out:

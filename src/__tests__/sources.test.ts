@@ -83,8 +83,8 @@ describe('encounter rules', () => {
 
 describe("A Witcher's Journal bestiary", () => {
   const list = JOURNAL_MONSTERS.map(journalCharacter)
-  it('has 33 monsters with unique ids that do not clash with the estimates', () => {
-    expect(list).toHaveLength(33)
+  it('has 35 monsters with unique ids that do not clash with the estimates', () => {
+    expect(list).toHaveLength(35)
     const ids = new Set([...list.map((c) => c.id), ...BESTIARY.map((b) => bestiaryCharacter(b).id)])
     expect(ids.size).toBe(list.length + BESTIARY.length)
   })

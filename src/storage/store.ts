@@ -1,6 +1,6 @@
 import { STORAGE_PREFIX } from '../edition'
 import { newCharacter } from '../model/factory'
-import type { Encounter } from '../model/encounter'
+import type { Encounter, PartyMember } from '../model/encounter'
 import { SCHEMA_VERSION, type Character } from '../model/types'
 
 // Persistence goes through this interface so a shared backend can replace the browser store
@@ -103,6 +103,37 @@ export class LocalEncounterRepository {
   save(encounters: Encounter[]): void {
     try {
       this.storage?.setItem(ENCOUNTER_KEY, JSON.stringify({ schema: SCHEMA_VERSION, encounters }))
+    } catch {
+      // Same as characters: keep working in memory if storage is unavailable.
+    }
+  }
+}
+
+const PARTY_KEY = `${STORAGE_PREFIX}:party`
+
+// The GM's list of player names, reused from fight to fight.
+export class LocalPartyRepository {
+  private storage: Storage | undefined
+
+  constructor(storage: Storage | undefined = safeStorage()) {
+    this.storage = storage
+  }
+
+  load(): PartyMember[] {
+    try {
+      const data = JSON.parse(this.storage?.getItem(PARTY_KEY) ?? 'null')
+      if (!Array.isArray(data?.party)) return []
+      return data.party
+        .filter((p: unknown): p is PartyMember => isObj(p) && typeof p.name === 'string' && typeof p.id === 'string')
+        .map((p: PartyMember) => ({ id: p.id, name: p.name, ref: typeof p.ref === 'number' ? p.ref : null }))
+    } catch {
+      return []
+    }
+  }
+
+  save(party: PartyMember[]): void {
+    try {
+      this.storage?.setItem(PARTY_KEY, JSON.stringify({ schema: SCHEMA_VERSION, party }))
     } catch {
       // Same as characters: keep working in memory if storage is unavailable.
     }

@@ -33,6 +33,17 @@ export interface EncounterEntry {
   injuries?: CriticalWound[]
   notes: string
   defeated: boolean
+  // A player added by name only, with no sheet: the tracker shows just initiative and conditions.
+  nameOnly?: boolean
+  // The player rolls their own initiative and the GM types it in; "Roll initiative" leaves it alone.
+  playerRolls?: boolean
+}
+
+// A player in the GM's party list: a name, and REF if the GM wants the app to roll for them.
+export interface PartyMember {
+  id: string
+  name: string
+  ref: number | null
 }
 
 export interface Encounter {
@@ -135,22 +146,88 @@ export function entryFromCharacter(c: Character): EncounterEntry {
   }
 }
 
+// The lines of a sheet's notes a GM wants mid-fight: threat, weaknesses and immunities.
+export function quickNotes(c: Character): string {
+  const lines = c.notes.split('\n').filter((l) => /^(Susceptible|Immune|Resistant|Regeneration):/.test(l))
+  return [c.bestiary ? c.bestiary.threat : c.notes.split('\n')[0], ...lines].filter(Boolean).join(' · ')
+}
+
 // Copies of a bestiary or NPC sheet as independent monsters: damage to them never touches the
-// template sheet when wounds are saved back.
-export function entriesFromTemplate(c: Character, count: number): EncounterEntry[] {
+// template sheet when wounds are saved back. `taken` are names already in the fight, so a second
+// batch of drowners carries on from "Drowner 3" instead of repeating "Drowner 1".
+export function entriesFromTemplate(c: Character, count: number, taken: string[] = []): EncounterEntry[] {
   const n = Math.max(1, Math.floor(count))
-  return Array.from({ length: n }, (_, i) => {
+  const used = new Set(taken)
+  const numbered = n > 1 || used.has(c.name) || used.has(`${c.name} 1`)
+  let next = 1
+  const name = () => {
+    if (!numbered) return c.name
+    while (used.has(`${c.name} ${next}`)) next++
+    used.add(`${c.name} ${next}`)
+    return `${c.name} ${next}`
+  }
+  return Array.from({ length: n }, () => {
     const e = entryFromCharacter(c)
     return {
       ...e,
       characterId: null,
       kind: 'monster' as const,
-      name: n > 1 ? `${c.name} ${i + 1}` : c.name,
+      name: name(),
       hp: { current: e.hp.max, max: e.hp.max },
       sta: { current: e.sta.max, max: e.sta.max },
-      notes: c.bestiary ? c.bestiary.threat : '',
+      notes: quickNotes(c),
     }
   })
+}
+
+// Name-only players for the whole party at once, skipping anyone already in the fight by name.
+// With a REF the app rolls for them; without one the player rolls and the GM types the result.
+export function partyEntries(party: PartyMember[], already: EncounterEntry[] = []): EncounterEntry[] {
+  const inFight = new Set(already.map((x) => x.name.trim().toLowerCase()))
+  return party
+    .filter((p) => p.name.trim() && !inFight.has(p.name.trim().toLowerCase()))
+    .map((p) => ({
+      id: uid(),
+      characterId: null,
+      kind: 'pc' as const,
+      name: p.name.trim(),
+      initiativeBase: p.ref ?? 0,
+      initiative: null,
+      hp: { current: 0, max: 0 },
+      sta: { current: 0, max: 0 },
+      stun: 0,
+      woundThreshold: 0,
+      sp: Object.fromEntries(HIT_LOCATIONS.map((l) => [l, 0])) as Record<HitLocation, number>,
+      defenses: { dodge: 0, reposition: 0 },
+      attacks: [],
+      conditions: [],
+      injuries: [],
+      notes: '',
+      defeated: false,
+      nameOnly: true,
+      playerRolls: p.ref === null,
+    }))
+}
+
+// Another copy of a combatant at full health, named after the last copy ("Bandit 3" -> "Bandit 4").
+export function duplicateEntry(x: EncounterEntry, all: EncounterEntry[]): EncounterEntry {
+  const stem = x.name.replace(/\s+\d+$/, '')
+  const names = new Set(all.map((y) => y.name))
+  let n = 2
+  while (names.has(`${stem} ${n}`)) n++
+  return {
+    ...x,
+    id: uid(),
+    characterId: null,
+    kind: x.kind === 'pc' ? 'pc' : 'monster',
+    name: `${stem} ${n}`,
+    initiative: null,
+    hp: { ...x.hp, current: x.hp.max },
+    sta: { ...x.sta, current: x.sta.max },
+    conditions: [],
+    injuries: [],
+    defeated: false,
+  }
 }
 
 export interface MonsterInput {
@@ -209,12 +286,15 @@ export function currentEntry(e: Encounter): EncounterEntry | null {
 }
 
 // Initiative is REF + 1d10. Rolls every combatant, or only those without one when onlyMissing is set.
+// Players who roll their own are never rolled for: the GM types their number in.
 export function rollInitiative(e: Encounter, onlyMissing = false, d10: D10 = rollD10): Encounter {
   const entries = e.entries.map((x) =>
-    onlyMissing && x.initiative !== null ? x : { ...x, initiative: rollCheck('Initiative', x.initiativeBase, d10).total },
+    x.playerRolls || (onlyMissing && x.initiative !== null) ? x : { ...x, initiative: rollCheck('Initiative', x.initiativeBase, d10).total },
   )
   const next = { ...e, entries }
-  return next.activeId ? next : { ...next, activeId: turnOrder(next).find((x) => !x.defeated)?.id ?? null }
+  // Wait for players' own rolls before marking whose turn it is, so the top of the order is right.
+  if (next.activeId || entries.some((x) => x.initiative === null)) return next
+  return { ...next, activeId: turnOrder(next).find((x) => !x.defeated)?.id ?? null }
 }
 
 export function advanceTurn(e: Encounter, dir: 1 | -1 = 1): Encounter {
@@ -287,6 +367,7 @@ export type EntryState = 'ok' | 'wounded' | 'dying' | 'defeated'
 // 0 HP or less is the Death State (errata p. 153).
 export function entryState(x: EncounterEntry): EntryState {
   if (x.defeated) return 'defeated'
+  if (x.nameOnly) return 'ok'
   if (x.hp.current <= 0) return 'dying'
   if (x.hp.current < x.woundThreshold) return 'wounded'
   return 'ok'
