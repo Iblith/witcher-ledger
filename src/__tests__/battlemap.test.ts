@@ -12,6 +12,7 @@ describe('battle map', () => {
     const m = mapOf(newEncounter())
     expect(m.cols).toBeGreaterThan(0)
     expect(Object.keys(m.positions)).toHaveLength(0)
+    expect(m.squareLabel).toBe('1 m')
   })
 
   it('places players on the left and the rest on the right, without overlaps', () => {

@@ -10,7 +10,8 @@ export interface Square {
 export interface BattleMap {
   cols: number
   rows: number
-  // Free text such as "2 m" or "6 ft". The project has no rulebook figure for it.
+  // Free text such as "2 m" or "6 ft". The project has no rulebook figure for it; the default is
+  // Jacob's own table scale (2026-10-21), not a sourced number.
   squareLabel: string
   // Entry id -> square. Entries without a square wait beside the map.
   positions: Record<string, Square>
@@ -19,8 +20,10 @@ export interface BattleMap {
 export const MAP_MIN = 4
 export const MAP_MAX = 40
 
+export const TABLE_SQUARE = '1 m'
+
 export function newMap(): BattleMap {
-  return { cols: 12, rows: 8, squareLabel: '', positions: {} }
+  return { cols: 12, rows: 8, squareLabel: TABLE_SQUARE, positions: {} }
 }
 
 // Older saved fights have no map field and get an empty one.

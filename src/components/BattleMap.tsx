@@ -156,10 +156,10 @@ export function BattleMap(props: {
         <div className="map-settings">
           <NumberField label="Columns" value={m.cols} min={MAP_MIN} max={MAP_MAX} onChange={(v) => props.onChange(resizeMap(m, v, m.rows))} />
           <NumberField label="Rows" value={m.rows} min={MAP_MIN} max={MAP_MAX} onChange={(v) => props.onChange(resizeMap(m, m.cols, v))} />
-          <TextField label="One square is" value={m.squareLabel} placeholder="e.g. 2 m" onChange={(v) => props.onChange({ ...m, squareLabel: v })} />
+          <TextField label="One square is" value={m.squareLabel} placeholder="e.g. 1 m" onChange={(v) => props.onChange({ ...m, squareLabel: v })} />
           <p className="hint map-settings-note">
-            The square size is your call: it is only a label, and the map works out no movement, reach or range (no rulebook figure for it here,
-            unverified).
+            1 m is your table's own scale, not a rulebook figure (none of the sources here give one). It is only a label: the map works out no
+            movement, reach or range.
           </p>
         </div>
       )}
