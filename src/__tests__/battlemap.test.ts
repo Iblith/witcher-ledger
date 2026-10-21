@@ -12,7 +12,16 @@ describe('battle map', () => {
     const m = mapOf(newEncounter())
     expect(m.cols).toBeGreaterThan(0)
     expect(Object.keys(m.positions)).toHaveLength(0)
-    expect(m.squareLabel).toBe('1 m')
+    expect(m.squareLabel).toBe('2 m')
+  })
+
+  it("moves old default labels to the book's 2 m but keeps typed ones", () => {
+    const old = (squareLabel: string) => mapOf({ ...newEncounter(), map: { cols: 12, rows: 8, squareLabel, positions: {} } }).squareLabel
+    expect(old('1 m')).toBe('2 m')
+    expect(old('')).toBe('2 m')
+    expect(old('5 ft')).toBe('5 ft')
+    // Once checked, a GM who deliberately types 1 m keeps it.
+    expect(mapOf({ ...newEncounter(), map: { ...newMap(), squareLabel: '1 m' } }).squareLabel).toBe('1 m')
   })
 
   it('places players on the left and the rest on the right, without overlaps', () => {

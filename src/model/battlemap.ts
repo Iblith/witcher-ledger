@@ -6,13 +6,15 @@ export interface Square {
 }
 
 // A plain positional grid for one fight: where everyone stands, nothing more. No movement, reach
-// or range rules are applied; the square size is whatever the GM types in.
+// or range rules are applied; the square size is only a label the GM can change.
 export interface BattleMap {
   cols: number
   rows: number
-  // Free text such as "2 m" or "6 ft". The project has no rulebook figure for it; the default is
-  // Jacob's own table scale (2026-10-21), not a sourced number.
+  // Free text such as "2 m" or "6 ft". Defaults to the core rulebook's 2 m.
   squareLabel: string
+  // Set once the label has been checked against the book's scale. Maps saved before then carry the
+  // old defaults (blank, or "1 m") and are moved to 2 m when read.
+  scaleChecked?: boolean
   // Entry id -> square. Entries without a square wait beside the map.
   positions: Record<string, Square>
 }
@@ -20,15 +22,21 @@ export interface BattleMap {
 export const MAP_MIN = 4
 export const MAP_MAX = 40
 
-export const TABLE_SQUARE = '1 m'
+// "If you are using miniatures and a grid map ... each square is equal to 2m" (Core Rulebook p. 151).
+export const BOOK_SQUARE = '2 m'
+const OLD_DEFAULTS = ['', '1 m']
 
 export function newMap(): BattleMap {
-  return { cols: 12, rows: 8, squareLabel: TABLE_SQUARE, positions: {} }
+  return { cols: 12, rows: 8, squareLabel: BOOK_SQUARE, positions: {}, scaleChecked: true }
 }
 
-// Older saved fights have no map field and get an empty one.
+// Older saved fights have no map field and get an empty one. A label still on an old default
+// becomes the book's 2 m; one the GM typed is left alone.
 export function mapOf(e: Encounter): BattleMap {
-  return e.map ? { ...newMap(), ...e.map } : newMap()
+  if (!e.map) return newMap()
+  const m = { ...newMap(), ...e.map, scaleChecked: true }
+  if (!e.map.scaleChecked && OLD_DEFAULTS.includes((e.map.squareLabel ?? '').trim())) m.squareLabel = BOOK_SQUARE
+  return m
 }
 
 const clampSize = (n: number) => Math.max(MAP_MIN, Math.min(MAP_MAX, Math.floor(n) || MAP_MIN))
