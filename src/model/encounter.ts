@@ -425,3 +425,14 @@ export function sampleEncounter(characters: Character[]): Encounter {
   ]
   return e
 }
+
+// Type-to-filter over NPC sheets: every word must appear in the name, bestiary type, threat or the
+// first line of the notes. Name matches come first.
+export function searchNpcs(list: Character[], query: string): Character[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return list
+  const hay = (c: Character) => [c.name, c.bestiary?.category, c.bestiary?.threat, c.notes.split('\n')[0]].filter(Boolean).join(' ').toLowerCase()
+  const hits = list.filter((c) => words.every((w) => hay(c).includes(w)))
+  const byName = (c: Character) => (words.every((w) => c.name.toLowerCase().includes(w)) ? 0 : 1)
+  return hits.sort((a, b) => byName(a) - byName(b))
+}

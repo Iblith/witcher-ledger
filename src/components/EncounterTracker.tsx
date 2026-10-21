@@ -16,6 +16,7 @@ import {
   rollHitLocation,
   spendStamina,
   rollInitiative,
+  searchNpcs,
   turnOrder,
   type Encounter,
   type EncounterEntry,
@@ -25,11 +26,31 @@ import type { Character } from '../model/types'
 import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/rules'
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
 import { BattleMap } from './BattleMap'
+import { STORAGE_PREFIX } from '../edition'
 import { blankInjury, cap, SEVERITIES } from '../model/injuries'
 import type { CritSeverity } from '../model/types'
 
 const SP_SHORT: Record<HitLocation, string> = { head: 'H', torso: 'T', rArm: 'RA', lArm: 'LA', rLeg: 'RL', lLeg: 'LL' }
 const STATE_LABEL = { ok: '', wounded: 'Wounded', dying: 'Death state', defeated: 'Out' } as const
+
+type View = 'initiative' | 'map'
+// Which tab each fight was last on. Kept on this device only, so flipping tabs doesn't count as
+// editing the fight (that would reorder the encounter list).
+const VIEW_KEY = `${STORAGE_PREFIX}:encounter-view`
+function loadView(id: string): View {
+  try {
+    return JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}')[id] === 'map' ? 'map' : 'initiative'
+  } catch {
+    return 'initiative'
+  }
+}
+function saveView(id: string, v: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(VIEW_KEY) ?? '{}'), [id]: v }))
+  } catch {
+    // Private windows: the tab just isn't remembered.
+  }
+}
 
 export interface TrackerProps {
   encounter: Encounter
@@ -44,6 +65,18 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
   const [damageFor, setDamageFor] = useState<string | null>(null)
   // One selection shared by the map tokens and the rows below.
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [view, setViewState] = useState<View>(() => loadView(e.id))
+  const setView = (v: View) => {
+    setViewState(v)
+    saveView(e.id, v)
+  }
+  // Set by the map's "Show in initiative": once the list is on screen, scroll to that row.
+  const scrollTo = useRef<string | null>(null)
+  useEffect(() => {
+    if (view !== 'initiative' || !scrollTo.current) return
+    document.getElementById(`entry-${scrollTo.current}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    scrollTo.current = null
+  }, [view])
   // Remembers which version of the fight was saved, so a new hit shows the button again.
   const [savedEntries, setSavedEntries] = useState<EncounterEntry[] | null>(null)
   const wroteBack = savedEntries === e.entries
@@ -114,16 +147,35 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
         />
       )}
 
-      {e.entries.length > 0 && (
-        <BattleMap
-          encounter={e}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onShowInList={(id) => document.getElementById(`entry-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-          onChange={(map) => onChange({ ...e, map })}
-        />
-      )}
+      <div className="tabs encounter-tabs" role="tablist" aria-label="Encounter view">
+        <button type="button" role="tab" aria-selected={view === 'initiative'} className={'tab' + (view === 'initiative' ? ' tab-active' : '')} onClick={() => setView('initiative')}>
+          Initiative
+        </button>
+        <button type="button" role="tab" aria-selected={view === 'map'} className={'tab' + (view === 'map' ? ' tab-active' : '')} onClick={() => setView('map')}>
+          Map
+        </button>
+      </div>
 
+      {view === 'map' ? (
+        e.entries.length === 0 ? (
+          <div className="panel">
+            <p className="hint">No one is in this fight yet. Add combatants on the Initiative tab and they appear here as tokens.</p>
+          </div>
+        ) : (
+          <BattleMap
+            encounter={e}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onShowInList={(id) => {
+              setSelectedId(id)
+              scrollTo.current = id
+              setView('initiative')
+            }}
+            onChange={(map) => onChange({ ...e, map })}
+          />
+        )
+      ) : (
+      <>
       {e.entries.length === 0 ? (
         <div className="panel">
           <p className="hint">
@@ -221,6 +273,8 @@ export function EncounterTracker({ encounter: e, characters, onChange, onRoll, o
             ))}
           </ol>
         </section>
+      )}
+      </>
       )}
 
       {adding && (
@@ -582,6 +636,8 @@ function AddDialog(props: {
   const [templateId, setTemplateId] = useState(mine[0]?.id ?? beasts[0]?.id ?? '')
   const [templateCount, setTemplateCount] = useState(1)
   const template = npcs.find((c) => c.id === templateId)
+  const [query, setQuery] = useState('')
+  const found = searchNpcs([...mine, ...beasts], query)
   useEffect(() => {
     if (ref.current && !ref.current.open) ref.current.showModal()
   }, [])
@@ -644,30 +700,41 @@ function AddDialog(props: {
           <hr className="rule" />
           <section className="stack">
             <h3 className="panel-title">NPCs and the bestiary</h3>
+            <label className="field">
+              <span className="field-label">Search</span>
+              <input
+                type="search"
+                value={query}
+                placeholder="Name, type or threat, e.g. drowner, vampire, hard"
+                aria-controls="npc-results"
+                onChange={(ev) => setQuery(ev.target.value)}
+                onKeyDown={(ev) => {
+                  // Enter picks the top hit, so "ghoul" + Enter is enough.
+                  if (ev.key === 'Enter' && found[0]) {
+                    ev.preventDefault()
+                    setTemplateId(found[0].id)
+                  }
+                }}
+              />
+            </label>
+            <ul className="npc-results" id="npc-results" role="listbox" aria-label="NPCs and monsters">
+              {found.length === 0 && <li className="hint">Nothing matches “{query}”. Quick-add it below instead.</li>}
+              {found.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={c.id === templateId}
+                    className={'npc-result' + (c.id === templateId ? ' npc-result-on' : '')}
+                    onClick={() => setTemplateId(c.id)}
+                  >
+                    <span className="npc-result-name">{c.name}</span>
+                    <span className="npc-result-meta">{c.bestiary ? `${c.bestiary.category} · ${c.bestiary.threat}` : 'Your NPC'}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
             <div className="card-fields">
-              <label className="field">
-                <span className="field-label">Who</span>
-                <select value={templateId} onChange={(ev) => setTemplateId(ev.target.value)}>
-                  {mine.length > 0 && (
-                    <optgroup label="Your NPCs">
-                      {mine.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {beasts.length > 0 && (
-                    <optgroup label="Bestiary">
-                      {beasts.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.bestiary!.category})
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </label>
               <NumberField label="How many" value={templateCount} min={1} max={20} onChange={setTemplateCount} />
             </div>
             {template && (
@@ -736,3 +803,4 @@ function AddDialog(props: {
     </dialog>
   )
 }
+

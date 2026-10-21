@@ -14,17 +14,16 @@ export interface BattleMap {
   squareLabel: string
   // Entry id -> square. Entries without a square wait beside the map.
   positions: Record<string, Square>
-  open: boolean
 }
 
 export const MAP_MIN = 4
 export const MAP_MAX = 40
 
 export function newMap(): BattleMap {
-  return { cols: 12, rows: 8, squareLabel: '', positions: {}, open: true }
+  return { cols: 12, rows: 8, squareLabel: '', positions: {} }
 }
 
-// Older saved fights have no map field and get an empty, open one.
+// Older saved fights have no map field and get an empty one.
 export function mapOf(e: Encounter): BattleMap {
   return e.map ? { ...newMap(), ...e.map } : newMap()
 }

@@ -17,7 +17,7 @@ import { entryState, turnOrder, type Encounter, type EncounterEntry } from '../m
 import { ConfirmButton, NumberField, TextField } from './fields'
 
 const MIN_CELL = 26
-const MAX_CELL = 64
+const MAX_CELL = 72
 
 // Where a pointer is being dragged: the token and the square under the finger (null when off the grid).
 interface Drag {
@@ -42,6 +42,7 @@ export function BattleMap(props: {
   const positions = livePositions(m, e.entries)
   const offMap = order.filter((x) => !positions[x.id])
   const selected = e.entries.find((x) => x.id === props.selectedId) ?? null
+  const active = e.entries.find((x) => x.id === e.activeId) ?? null
   const [settings, setSettings] = useState(false)
   const [drag, setDrag] = useState<Drag | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -55,7 +56,7 @@ export function BattleMap(props: {
     const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [m.open])
+  }, [])
   const cell = Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor(width / m.cols)))
 
   const squareAt = (clientX: number, clientY: number): Square | null => {
@@ -132,15 +133,6 @@ export function BattleMap(props: {
     }
   }
 
-  if (!m.open)
-    return (
-      <div className="tracker-bar">
-        <button type="button" className="btn" onClick={() => props.onChange({ ...m, open: true })}>
-          Show battle map
-        </button>
-      </div>
-    )
-
   const ghost = drag?.moved && drag.sq ? drag.sq : null
 
   return (
@@ -153,12 +145,10 @@ export function BattleMap(props: {
             {m.squareLabel.trim() ? ` · 1 square = ${m.squareLabel.trim()}` : ''}
           </span>
         </h2>
+        {active && <span className="state-pill state-next">Turn: {active.name}</span>}
         <span className="toolbar-spacer" />
         <button type="button" className="btn-chip" aria-expanded={settings} onClick={() => setSettings(!settings)}>
           {settings ? 'Done' : 'Grid'}
-        </button>
-        <button type="button" className="btn-chip" onClick={() => props.onChange({ ...m, open: false })}>
-          Hide
         </button>
       </div>
 
@@ -229,7 +219,7 @@ export function BattleMap(props: {
           {selected.conditions.length > 0 && <span className="hint">{selected.conditions.join(', ')}</span>}
           <span className="toolbar-spacer" />
           <button type="button" className="btn-chip" onClick={() => props.onShowInList(selected.id)}>
-            Show in list
+            Show in initiative
           </button>
           {positions[selected.id] && (
             <button type="button" className="btn-chip" onClick={() => props.onChange(removeToken(m, selected.id))}>

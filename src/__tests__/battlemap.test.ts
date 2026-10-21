@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { livePositions, mapOf, moveToken, newMap, placeEveryone, removeToken, resizeMap, tokenLabel } from '../model/battlemap'
-import { monsterEntries, newEncounter, type EncounterEntry } from '../model/encounter'
+import { monsterEntries, newEncounter, searchNpcs, type EncounterEntry } from '../model/encounter'
+import { newCharacter } from '../model/factory'
+import type { Character } from '../model/types'
 
 const MON = { name: 'Drowner', count: 3, hp: 20, sta: 20, ref: 6, sp: 2, headSp: 2, dodge: 12, attack: 13, damage: '2d6', notes: '' }
 const pc = (name: string): EncounterEntry => ({ ...monsterEntries({ ...MON, name, count: 1 })[0], kind: 'pc' })
@@ -8,7 +10,6 @@ const pc = (name: string): EncounterEntry => ({ ...monsterEntries({ ...MON, name
 describe('battle map', () => {
   it('older fights without a map get an empty one', () => {
     const m = mapOf(newEncounter())
-    expect(m.open).toBe(true)
     expect(m.cols).toBeGreaterThan(0)
     expect(Object.keys(m.positions)).toHaveLength(0)
   })
@@ -65,5 +66,19 @@ describe('battle map', () => {
     expect(tokenLabel('Geralt of Rivia')).toBe('GR')
     expect(tokenLabel('Pip')).toBe('Pi')
     expect(tokenLabel("Captain's deserter 2")).toBe('C2')
+  })
+})
+
+describe('NPC search', () => {
+  const npc = (name: string, category?: string, threat = 'Medium') =>
+    ({ ...newCharacter('npc'), name, bestiary: category ? { category, threat, page: 1, confirmed: '', checked: false } : undefined }) as Character
+  const list = [npc('Ghoul', 'Necrophage', 'Easy'), npc('Higher Vampire', 'Vampire', 'Hard'), npc('Bruxa', 'Vampire'), npc('Pip Dewberry')]
+
+  it('matches name, type and threat, every word, name hits first', () => {
+    expect(searchNpcs(list, '').length).toBe(4)
+    expect(searchNpcs(list, 'GHO').map((c) => c.name)).toEqual(['Ghoul'])
+    expect(searchNpcs(list, 'vampire').map((c) => c.name)).toEqual(['Higher Vampire', 'Bruxa'])
+    expect(searchNpcs(list, 'vampire hard').map((c) => c.name)).toEqual(['Higher Vampire'])
+    expect(searchNpcs(list, 'nothing here')).toEqual([])
   })
 })
