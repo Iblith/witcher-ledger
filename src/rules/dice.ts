@@ -35,9 +35,14 @@ export function rollCheck(label: string, base: number, d10: D10 = rollD10): Chec
 }
 
 // Save Checks (Stun, Death) are a plain 1d10 with no exploding. The save succeeds only if the roll is
-// LESS than the Save value; equal or higher fails (errata p. 47 "roll under").
+// LESS than the Save value; equal or higher fails (core p. 47 "roll under").
 export function rollFlat(label: string, target = 0, d10: D10 = rollD10): CheckRoll {
   const r = d10()
   const save = target > 0 ? { target, passed: r < target } : undefined
   return { label, base: 0, dice: [r], dieTotal: r, total: r, outcome: 'normal', save, at: Date.now() }
+}
+
+// 2d6, for the critical wound tables (core p. 158-160).
+export function roll2d6(d6: () => number = () => 1 + Math.floor(Math.random() * 6)): number {
+  return d6() + d6()
 }

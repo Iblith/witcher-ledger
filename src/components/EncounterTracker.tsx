@@ -15,6 +15,10 @@ import {
   recoverStamina,
   rollHitLocation,
   spendStamina,
+  defenseBase,
+  defenseCost,
+  gangUpPenalty,
+  takeDefense,
   rollInitiative,
   searchNpcs,
   turnOrder,
@@ -27,7 +31,9 @@ import { HIT_LOCATIONS, HIT_LOCATION_NAMES, type HitLocation } from '../rules/ru
 import { ConfirmButton, NumberField, NumberInput, TextField } from './fields'
 import { BattleMap } from './BattleMap'
 import { STORAGE_PREFIX } from '../edition'
-import { blankInjury, cap, SEVERITIES } from '../model/injuries'
+import { blankInjury, cap, fromCritTable } from '../model/injuries'
+import { critLevel, critWound, critWoundForRoll, CRIT_LEVELS, CRIT_WOUNDS } from '../model/criticals'
+import { roll2d6 } from '../rules/dice'
 import type { CritSeverity } from '../model/types'
 
 const SP_SHORT: Record<HitLocation, string> = { head: 'H', torso: 'T', rArm: 'RA', lArm: 'LA', rLeg: 'RL', lLeg: 'LL' }
@@ -386,8 +392,18 @@ function EntryRow(props: {
           <button type="button" className={'btn' + (props.damageOpen ? ' btn-primary' : '')} onClick={props.onToggleDamage}>
             Damage
           </button>
-          <button type="button" className="roll-btn roll-labeled" onClick={() => props.onRoll(`${x.name} dodge`, x.defenses.dodge)}>
-            Dodge {x.defenses.dodge}
+          <button
+            type="button"
+            className="roll-btn roll-labeled"
+            onClick={() => {
+              const cost = defenseCost(x)
+              props.onRoll(`${x.name} dodge${gangUpPenalty(x) ? ` (ganged up −${gangUpPenalty(x)})` : ''}${cost ? ', −1 STA' : ''}`, defenseBase(x))
+              props.onChange(takeDefense(x))
+            }}
+            title={`Each defense after the first this round costs 1 STA unless they are actively dodging (core p. 151). Defenses so far: ${x.defensesThisRound ?? 0}`}
+          >
+            Dodge {defenseBase(x)}
+            {defenseCost(x) ? ' · −1 STA' : ''}
           </button>
           {x.attacks.map((a, i) => (
             <button
@@ -414,9 +430,19 @@ function EntryRow(props: {
           <button type="button" className="btn btn-quiet" onClick={() => props.onChange(spendStamina(x, 3))} title="Extra action at -3, costs 3 Stamina (players only)">
             Extra action −3
           </button>
-          <button type="button" className="btn btn-quiet" onClick={() => props.onChange(spendStamina(x, 1))} title="Each defense after the first in a round costs 1 Stamina">
-            Extra defense −1
+          <button
+            type="button"
+            className={'btn-chip' + (x.activelyDodging ? ' cond-on' : '')}
+            aria-pressed={!!x.activelyDodging}
+            onClick={() => props.onChange({ activelyDodging: !x.activelyDodging })}
+            title="Full round: −2 to anyone striking them in melee this round, and no Stamina cost for defending (core p. 151)"
+          >
+            Actively dodging
           </button>
+          <label className="gang-up" title="Ganging Up: −1 to defense per melee attacker past the first (core p. 153). Clears each round.">
+            <span className="field-label">Melee attackers</span>
+            <NumberInput ariaLabel={`${x.name} melee attackers`} value={x.meleeAttackers ?? 0} min={0} onChange={(v) => props.onChange({ meleeAttackers: v })} />
+          </label>
         </div>
 
         {props.damageOpen && <DamageForm x={x} onApply={props.onDamage} />}
@@ -492,15 +518,28 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
   const [crit, setCrit] = useState(false)
   const [severity, setSeverity] = useState<CritSeverity>('simple')
   const [critText, setCritText] = useState('')
-  const base = applyDamage(x, { amount, location, ignoreArmor, resistant, vulnerable })
-  const injury = crit ? { ...blankInjury(location), severity, description: critText.trim() } : null
+  // Critical bonus damage goes straight through armor (core p. 158).
+  const bonus = crit ? critLevel(severity).bonus : 0
+  const base = applyDamage(x, { amount, location, ignoreArmor, resistant, vulnerable, critBonus: bonus })
+  const table = critWound(critText.trim())
+  const blank = { ...blankInjury(location), severity, description: critText.trim() }
+  const injury = crit ? (table ? fromCritTable(blank, table) : blank) : null
   const preview = injury
     ? {
         ...base,
         entry: { ...base.entry, injuries: [...(x.injuries ?? []), injury] },
-        summary: `${amount > 0 ? base.summary : x.name}; ${severity} critical to the ${HIT_LOCATION_NAMES[location].toLowerCase()}${injury.description ? ` (${injury.description})` : ''}`,
+        summary: `${amount > 0 ? base.summary : `${x.name}: ${base.hpLoss} HP`}; ${severity} critical (+${bonus}) to the ${HIT_LOCATION_NAMES[location].toLowerCase()}${injury.description ? ` (${injury.description})` : ''}, Stun save`,
       }
     : base
+  // Rolls the wound on the 2d6 table for this severity, and moves the location to match.
+  const rollWound = () => {
+    const t = critWoundForRoll(severity, roll2d6())
+    if (!t) return
+    setCritText(t.name)
+    if (t.area === 'head' || t.area === 'torso') setLocation(t.area)
+    else if (t.area === 'arm' && location !== 'rArm' && location !== 'lArm') setLocation('rArm')
+    else if (t.area === 'leg' && location !== 'rLeg' && location !== 'lLeg') setLocation('rLeg')
+  }
   const canApply = amount > 0 || crit
   return (
     <form
@@ -549,14 +588,23 @@ function DamageForm({ x, onApply }: { x: EncounterEntry; onApply: (r: ReturnType
           <label className="field">
             <span className="field-label">Severity</span>
             <select value={severity} onChange={(ev) => setSeverity(ev.target.value as CritSeverity)}>
-              {SEVERITIES.map((sv) => (
-                <option key={sv} value={sv}>
-                  {cap(sv)}
+              {CRIT_LEVELS.map((l) => (
+                <option key={l.severity} value={l.severity}>
+                  {cap(l.severity)} · beat defense by {l.beatBy}+ · +{l.bonus} damage
                 </option>
               ))}
             </select>
           </label>
-          <TextField label="Wound" value={critText} onChange={setCritText} placeholder="e.g. Fractured arm" />
+          <TextField label="Wound" value={critText} onChange={setCritText} placeholder="Pick or roll" list="crit-wounds" />
+          <datalist id="crit-wounds">
+            {CRIT_WOUNDS.filter((t) => t.severity === severity).map((t) => (
+              <option key={t.name} value={t.name} />
+            ))}
+          </datalist>
+          <button type="button" className="btn-chip" onClick={rollWound}>
+            Roll 2d6
+          </button>
+          {table && <p className="hint">{table.effect}. Stabilized: {table.stabilized}. Treated: {table.treated} (core p. 158-160).</p>}
         </div>
       )}
       <div className="damage-preview">

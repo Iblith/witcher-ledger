@@ -38,6 +38,11 @@ export interface EncounterEntry {
   nameOnly?: boolean
   // The player rolls their own initiative and the GM types it in; "Roll initiative" leaves it alone.
   playerRolls?: boolean
+  // This round: defenses taken so far, whether they spent their turn actively dodging, and how many
+  // melee attackers are on them (Ganging Up). Cleared when a new round begins.
+  defensesThisRound?: number
+  activelyDodging?: boolean
+  meleeAttackers?: number
 }
 
 export interface Encounter {
@@ -70,26 +75,23 @@ export const CONDITIONS = [
   'Hallucinating',
 ] as const
 
-// What each condition does, shown on hover. Only the errata's wording is used; the rest are core
-// rulebook conditions the project has no text for.
-const SEE_BOOK = 'Core rulebook condition; see your book.'
+// What each condition does, shown on hover: the Effect table (core p. 161) in the cheat sheet's words.
 export const CONDITION_HELP: Record<(typeof CONDITIONS)[number], string> = {
-  Bleeding: SEE_BOOK,
-  Poisoned: SEE_BOOK,
-  Burning: SEE_BOOK,
-  Frozen: SEE_BOOK,
-  Staggered: '-2 to attack and defense until the start of their next turn (errata p. 161).',
-  Stunned: 'Out of Stamina means stunned: they cannot do anything but recover. A Stun save rolls under Stun (errata p. 47-48). Other effects: see your book.',
-  Prone: SEE_BOOK,
-  Blinded: SEE_BOOK,
-  Unconscious: 'Non-lethal damage equal to their Stamina knocks them out; treated as stunned until they recover 20 Stamina and pass a Stun save (errata p. 153).',
-  Grappled: SEE_BOOK,
-  Intoxicated: SEE_BOOK,
-  Hallucinating: SEE_BOOK,
+  Bleeding: '2 damage per turn. DC 15 First Aid (1 action) or a Healing spell stops it (p. 161).',
+  Poisoned: '3 damage per turn, armor doesn’t help. DC 15 Endurance (1 action) ends it (p. 161).',
+  Burning: '5 damage to every location per turn, armor soaks it, and armor and weapons lose 1 per turn. Spend a turn on water or stop, drop and roll (p. 161).',
+  Frozen: '−3 SPD and −1 REF. DC 16 Physique (1 action) breaks free (p. 161).',
+  Staggered: '−2 to attack and defense until the start of their next turn (p. 161).',
+  Stunned: 'No actions, and attackers only need to beat DC 10. A Stun save ends it and takes the whole turn; getting hit ends it at once (p. 161).',
+  Prone: '−2 to attack and defense until they use their move to stand (p. 163).',
+  Blinded: '−3 to attack and defense, −5 sight Awareness, until they spend a turn clearing their eyes (p. 161).',
+  Unconscious: 'Non-lethal damage equal to their Stamina knocks them out; treated as stunned until they recover 20 Stamina and pass a Stun save (p. 153).',
+  Grappled: 'Can’t move away, −2 to physical actions; Dodge/Escape against the grappler’s Brawling to slip free each turn (p. 163).',
+  Intoxicated: '−2 REF, DEX and INT, −3 Verbal Combat, 25% chance of a blackout (p. 161).',
+  Hallucinating: 'DC 15 Deduction to see through each false image (p. 161).',
 }
 
-// Damage multipliers for where a blow lands (humanoid hit locations). The multipliers and the
-// six-location roll table below are UNVERIFIED core-book memory.
+// Damage multipliers for where a blow lands, and the 1d10 humanoid location table (core p. 152).
 export const LOCATION_MULTIPLIER: Record<HitLocation, number> = {
   head: 3,
   torso: 1,
@@ -335,11 +337,15 @@ export function advanceTurn(e: Encounter, dir: 1 | -1 = 1): Encounter {
     }
     if (!order[turn].defeated) break
   }
-  return { ...e, activeId: order[turn].id, round }
+  // A new round clears the per-round defense counts (core p. 151, 153).
+  const entries = round > e.round ? e.entries.map(newRoundEntry) : e.entries
+  return { ...e, entries, activeId: order[turn].id, round }
 }
 
 export interface DamageInput {
   amount: number
+  // Critical wound bonus damage, which armor can't stop (core p. 158).
+  critBonus?: number
   location: HitLocation
   ignoreArmor: boolean
   resistant: boolean
@@ -364,6 +370,7 @@ export function applyDamage(x: EncounterEntry, d: DamageInput): DamageResult {
   let hpLoss = Math.floor(through * LOCATION_MULTIPLIER[d.location])
   if (d.resistant && !d.vulnerable) hpLoss = Math.floor(hpLoss / 2)
   if (d.vulnerable && !d.resistant) hpLoss *= 2
+  hpLoss += d.critBonus ?? 0
   const ablated = through > 0 && !d.ignoreArmor && armorSp > 0
   const entry: EncounterEntry = {
     ...x,
@@ -389,15 +396,41 @@ export function entryState(x: EncounterEntry): EntryState {
   return 'ok'
 }
 
-// Recover action (a full round): regain Stamina equal to REC, up to the maximum (errata p. 151).
+// Recover action (a full round): regain Stamina equal to REC, up to the maximum (core p. 151).
 export function recoverStamina(x: EncounterEntry): EncounterEntry {
   const rec = x.rec ?? x.woundThreshold
   return { ...x, sta: { ...x.sta, current: Math.min(x.sta.max, x.sta.current + rec) } }
 }
 
-// Extra action costs 3 STA; each defense after the first in a round costs 1 (errata p. 151).
+// An extra action costs 3 STA (core p. 151).
 export function spendStamina(x: EncounterEntry, amount: number): EncounterEntry {
   return { ...x, sta: { ...x.sta, current: x.sta.current - amount } }
+}
+
+// Forced into more than one defense in a round, each one costs 1 STA, unless they spent their turn
+// actively dodging (core p. 151). The book doesn't say whether the first is free once a second
+// comes; like the cheat sheet, the app charges from the second defense on.
+export function defenseCost(x: EncounterEntry): number {
+  return !x.activelyDodging && (x.defensesThisRound ?? 0) >= 1 ? 1 : 0
+}
+
+export function takeDefense(x: EncounterEntry): EncounterEntry {
+  const cost = defenseCost(x)
+  return { ...spendStamina(x, cost), defensesThisRound: (x.defensesThisRound ?? 0) + 1 }
+}
+
+// Ganging Up (core p. 153): −1 to defense per melee attacker past the first. Actively dodging puts −2
+// on anyone striking them in melee that round (p. 151), which is the attacker's penalty, not theirs.
+export function gangUpPenalty(x: EncounterEntry): number {
+  return Math.max(0, (x.meleeAttackers ?? 0) - 1)
+}
+
+export function defenseBase(x: EncounterEntry): number {
+  return x.defenses.dodge - gangUpPenalty(x)
+}
+
+function newRoundEntry(x: EncounterEntry): EncounterEntry {
+  return { ...x, defensesThisRound: 0, activelyDodging: false, meleeAttackers: 0 }
 }
 
 // Copies a fight's HP, Stamina, armor SP and new injuries back onto the linked character sheets.

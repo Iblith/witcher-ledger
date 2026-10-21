@@ -1,6 +1,6 @@
 import { derive, HIT_LOCATIONS, SKILL_BY_ID, type DerivedStats, type HitLocation, type StatKey } from '../rules/rules'
 
-// Skills that armor EV hampers on top of REF and DEX (errata p. 78, EV & Magic).
+// Skills that armor EV hampers on top of REF and DEX (core p. 78, EV & Magic).
 const EV_MAGIC_SKILLS = new Set(['spell-casting', 'hex-weaving', 'ritual-crafting'])
 import type { Character, CharacterKind } from './types'
 
@@ -37,7 +37,7 @@ export function armorEv(c: Character): number {
   return [...byPiece.values()].reduce((s, v) => s + v, loose)
 }
 
-// Armor EV is subtracted from REF and DEX, to a minimum of 1 (errata p. 78).
+// Armor EV is subtracted from REF and DEX, to a minimum of 1 (core p. 78).
 export function effectiveStat(c: Character, k: StatKey): number {
   if (k !== 'REF' && k !== 'DEX') return c.stats[k]
   const ev = armorEv(c)
@@ -57,18 +57,27 @@ export function statForSkill(c: Character, skillId: string): StatKey | undefined
   return SKILL_BY_ID[skillId]?.stat ?? c.customSkills.find((k) => k.id === skillId)?.stat
 }
 
-// Recover action (errata p. 151): restores REC Stamina.
+// Recover action (core p. 151): restores REC Stamina.
 export function recoverAction(c: Character): Partial<Character> {
   const d = derived(c)
   return { sta: { ...c.sta, current: Math.min(d.maxSta, c.sta.current + d.rec) } }
 }
 
-// Casting: every spell or Sign costs Stamina. Spending past the Vigor Threshold in a round is
-// overexertion, which deals damage and an elemental fumble (errata, core p. 166); the amount is in the
-// core book, so this only flags it. `spentThisRound` is the total before this cast.
-export function castSpell(c: Character, cost: number, spentThisRound: number): { patch: Partial<Character>; spent: number; overThreshold: boolean } {
+// Casting: every spell or Sign costs its Stamina (core p. 166). Going past the Vigor Threshold in a
+// round is overexertion: 5 HP for every point of Stamina beyond it, and a roll on the Elemental Fumble
+// table (p. 166). `spentThisRound` is the total before this cast; only the points newly past the
+// threshold cost HP.
+export function castSpell(
+  c: Character,
+  cost: number,
+  spentThisRound: number,
+): { patch: Partial<Character>; spent: number; overThreshold: boolean; hpCost: number } {
   const spent = spentThisRound + cost
-  return { patch: { sta: { ...c.sta, current: c.sta.current - cost } }, spent, overThreshold: spent > c.vigor }
+  const over = Math.max(0, spent - c.vigor) - Math.max(0, spentThisRound - c.vigor)
+  const hpCost = over * 5
+  const patch: Partial<Character> = { sta: { ...c.sta, current: c.sta.current - cost } }
+  if (hpCost) patch.hp = { ...c.hp, current: c.hp.current - hpCost }
+  return { patch, spent, overThreshold: spent > c.vigor, hpCost }
 }
 
 // The leading number of a spell's STA cost text ("5", "3 per round"), or null for a range ("1-7"),
@@ -106,7 +115,7 @@ export function toCombatant(c: Character): Combatant {
     kind: c.kind,
     name: c.name,
     initiativeBase: effectiveStat(c, 'REF'),
-    // Dwarf Tough: +2 SP everywhere on top of armor, never ablated (errata p. 23).
+    // Dwarf Tough: +2 SP everywhere on top of armor, never ablated (core p. 23).
     toughSp: c.race === 'Dwarf' ? 2 : 0,
     hp: { current: c.hp.current, max: d.maxHp },
     sta: { current: c.sta.current, max: d.maxSta },

@@ -132,7 +132,7 @@ function Recovery({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           Recover action +{d.rec} STA
         </button>
       </div>
-      <p className="hint">Saves roll under the Save value (errata p. 47); the Recover action restores REC Stamina (errata p. 151). Resting and healing rules are in the core book.</p>
+      <p className="hint">Saves roll under the Save value (core p. 47); the Recover action restores REC Stamina (core p. 151). Rest and healing are on the Injuries tab (core p. 173).</p>
     </section>
   )
 }
@@ -181,7 +181,7 @@ function Overview({ c, set, onRoll }: { c: Character; set: Setter; onRoll: Sheet
           current={c.luckCurrent}
           max={c.stats.LUCK}
           onChange={(v) => set({ luckCurrent: v })}
-          footer={<p className="hint">Spend before a roll: +1 per point (raises a Death save target). Refills each session (errata p. 47).</p>}
+          footer={<p className="hint">Spend before a roll: +1 per point (raises a Death save target). Refills each session (core p. 47).</p>}
         />
       </section>
 
@@ -401,7 +401,7 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
         {armorEv(c) > 0 && (
           <p className="hint">
             Armor EV {armorEv(c)}: −{armorEv(c)} to REF and DEX (minimum 1) and to Spell Casting, Hex Weaving and Ritual Crafting. Already counted in
-            the numbers on this sheet (errata p. 78).
+            the numbers on this sheet (core p. 78).
           </p>
         )}
       </section>
@@ -479,7 +479,7 @@ function Combat({ c, set, onRoll, onOpenInjuries }: { c: Character; set: Setter;
           </table>
         </div>
         <p className="hint">A piece that covers several locations counts its EV once.</p>
-        {c.race === 'Dwarf' && <p className="hint">Tough: +2 SP on every location on top of armor, never ablated (errata p. 23). The encounter tracker adds it for you.</p>}
+        {c.race === 'Dwarf' && <p className="hint">Tough: +2 SP on every location on top of armor, never ablated (core p. 23). The encounter tracker adds it for you.</p>}
       </section>
 
       <section className="panel">
@@ -645,7 +645,9 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
     const r = castSpell(c, cost, spent)
     set(r.patch)
     setSpent(r.spent)
-    setLastCast(`${name}: −${cost} STA${r.overThreshold ? '. Over the Vigor Threshold: overexertion damage and an elemental fumble, see core p. 166' : ''}`)
+    setLastCast(
+      `${name}: −${cost} STA${r.hpCost ? `, −${r.hpCost} HP for overexertion. Roll on the Elemental Fumble table (core p. 166)` : r.overThreshold ? '. Still over the Vigor Threshold' : ''}`,
+    )
     onRoll(`Cast ${name}`, castBase)
   }
   return (
@@ -676,8 +678,8 @@ function Magic({ c, set, onRoll }: { c: Character; set: Setter; onRoll: SheetPro
         </div>
         {lastCast && <p className="pool-note">{lastCast}</p>}
         <p className="hint">
-          Casting costs the spell's Stamina. Spending past the Vigor Threshold in one round is overexertion: it deals damage and an
-          elemental fumble (errata, core p. 166). Sign Stamina is your choice; check the cost in your book.
+          Casting costs the spell's Stamina. Spending past the Vigor Threshold in one round is overexertion: 5 HP for every point past it,
+          and a roll on the Elemental Fumble table (core p. 166). Signs have a variable cost you choose (core p. 114).
         </p>
       </section>
       {c.spells.length === 0 && <p className="hint">No spells, signs or invocations yet.</p>}

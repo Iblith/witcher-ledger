@@ -4,7 +4,7 @@ import { derive, SKILL_BY_ID, type Stats } from '../rules/rules'
 import { castSpell, derived, recoverAction, staCostNumber, toCombatant } from '../model/combat'
 import { applyJournalUpdate, BESTIARY, bestiaryCharacter, RETIRED_ESTIMATES } from '../model/bestiary'
 import { JOURNAL_MONSTERS, journalCharacter, journalId } from '../model/journalBestiary'
-import { applyDamage, entryFromCharacter, entryState, monsterEntries, recoverStamina, spendStamina } from '../model/encounter'
+import { advanceTurn, applyDamage, defenseBase, entryFromCharacter, entryState, monsterEntries, newEncounter, recoverStamina, spendStamina, takeDefense } from '../model/encounter'
 import { newCharacter } from '../model/factory'
 
 // Checks against the rules sources in the project folder: A Witcher's Journal (WJ) and the core v4
@@ -41,7 +41,7 @@ describe('Recover action (errata p.151)', () => {
 })
 
 describe('Vigor Threshold', () => {
-  it('spends Stamina and flags going over the threshold in a round', () => {
+  it('spends Stamina, and 5 HP per point past the threshold in a round (core p. 166)', () => {
     const c = newCharacter('pc')
     c.vigor = 5
     const a = castSpell(c, 5, 0)
@@ -49,7 +49,12 @@ describe('Vigor Threshold', () => {
     const b = castSpell({ ...c, ...a.patch }, 3, a.spent)
     expect(b.overThreshold).toBe(true)
     expect(b.patch.sta?.current).toBe(c.sta.current - 8)
-    expect(b.patch.hp).toBeUndefined()
+    expect(b.hpCost).toBe(15)
+    expect(b.patch.hp?.current).toBe(c.hp.current - 15)
+    // Only the points newly past the threshold cost HP.
+    const d = castSpell({ ...c, ...b.patch }, 1, b.spent)
+    expect(d.hpCost).toBe(5)
+    expect(castSpell(c, 5, 0).patch.hp).toBeUndefined()
   })
   it('reads the number from a cost', () => {
     expect(staCostNumber('5')).toBe(5)
@@ -65,7 +70,7 @@ describe('encounter rules', () => {
   it('susceptible doubles damage (WJ p.13)', () => {
     expect(applyDamage(m(), { amount: 7, location: 'torso', ignoreArmor: false, resistant: false, vulnerable: true }).hpLoss).toBe(10)
   })
-  it('0 HP is the death state (errata p.153)', () => {
+  it('0 HP is the death state (core p. 153)', () => {
     expect(entryState({ ...m(), hp: { current: 0, max: 30 } })).toBe('dying')
   })
   it('Recover restores REC, extra actions spend Stamina', () => {
@@ -74,6 +79,28 @@ describe('encounter rules', () => {
     const tired = spendStamina(spendStamina(x, 3), 1)
     expect(tired.sta.current).toBe(x.sta.current - 4)
     expect(recoverStamina(tired).sta.current).toBe(x.sta.current)
+  })
+  it('charges 1 STA per defense after the first, unless actively dodging (core p. 151)', () => {
+    const x = m()
+    const one = takeDefense(x)
+    expect(one.sta.current).toBe(30)
+    const two = takeDefense(one)
+    expect([two.sta.current, two.defensesThisRound]).toEqual([29, 2])
+    expect(takeDefense({ ...one, activelyDodging: true }).sta.current).toBe(30)
+  })
+  it('Ganging Up takes 1 off defense per melee attacker past the first (core p. 153)', () => {
+    expect(defenseBase({ ...m(), meleeAttackers: 4 })).toBe(m().defenses.dodge - 3)
+    expect(defenseBase({ ...m(), meleeAttackers: 1 })).toBe(m().defenses.dodge)
+  })
+  it('a new round clears the defense counts', () => {
+    const x = { ...m(), initiative: 10, defensesThisRound: 2, meleeAttackers: 3, activelyDodging: true }
+    const e = { ...newEncounter(), entries: [x], activeId: x.id }
+    const next = advanceTurn(e)
+    expect(next.round).toBe(2)
+    expect(next.entries[0]).toMatchObject({ defensesThisRound: 0, meleeAttackers: 0, activelyDodging: false })
+  })
+  it('critical bonus damage ignores armor (core p. 158)', () => {
+    expect(applyDamage(m(), { amount: 2, location: 'torso', ignoreArmor: false, resistant: false, critBonus: 5 }).hpLoss).toBe(5)
   })
   it('beasts are not resistant by default, other monsters are (errata p.162)', () => {
     expect(entryFromCharacter(journalCharacter(JOURNAL_MONSTERS.find((j) => j.name === 'Bear')!)).resistant).toBe(false)
@@ -191,7 +218,7 @@ describe('healing and critical wounds (errata p. 103, 173-174)', () => {
     expect(p.hp?.current).toBe(derived(c).maxHp)
     expect(p.crits?.map((w) => !!w.healed)).toEqual([true, false])
   })
-  it('treated effect replaces the effect once treated; Deadly wounds have no countdown', async () => {
+  it('treated effect replaces the effect once treated; Deadly wounds can be healed too (core p. 174)', async () => {
     const { blankInjury, canCountDown, currentEffect, healReady } = await import('../model/injuries')
     const w = { ...blankInjury(), effect: '-2 REF', treatedEffect: '-1 REF' }
     expect(currentEffect(w)).toBe('-2 REF')
@@ -199,7 +226,27 @@ describe('healing and critical wounds (errata p. 103, 173-174)', () => {
     expect(currentEffect({ ...w, treated: true, treatedEffect: '' })).toBe('-2 REF')
     expect(healReady({ ...w, healNeeded: 3, healDone: 2 })).toBe(false)
     expect(healReady({ ...w, healNeeded: 3, healDone: 3 })).toBe(true)
-    expect(canCountDown({ ...w, severity: 'deadly' })).toBe(false)
-    expect(healReady({ ...w, severity: 'deadly', healNeeded: 1, healDone: 1 })).toBe(false)
+    expect(canCountDown({ ...w, severity: 'deadly' })).toBe(true)
+    expect(canCountDown({ ...w, severity: 'deadly', description: 'Separated Spine/Decapitated' })).toBe(false)
+    expect(healReady({ ...w, severity: 'deadly', healNeeded: 1, healDone: 1 })).toBe(true)
+  })
+})
+
+describe('critical wounds and healing from the core book', () => {
+  it('fills a wound from the tables with its three effects and the doctor rounds (core p. 158-160, 174)', async () => {
+    const { blankInjury, currentEffect, fromCritTable } = await import('../model/injuries')
+    const { critWound, critForMargin, critHealDays, critWoundForRoll } = await import('../model/criticals')
+    const w = fromCritTable(blankInjury(), critWound('Fractured Arm')!)
+    expect(w).toMatchObject({ severity: 'complex', healNeeded: 4, effect: '-3 to actions with that arm' })
+    expect(currentEffect({ ...w, treated: true })).toBe('-2 to actions with that arm')
+    expect(currentEffect({ ...w, treated: true, healDone: 4 })).toBe('-1 to actions with that arm')
+    expect(critWoundForRoll('difficult', 12)?.name).toBe('Skull Fracture')
+    expect(critWoundForRoll('simple', 7)?.name).toBe('Foreign Object')
+    expect([critForMargin(6), critForMargin(7)?.bonus, critForMargin(14)?.severity, critForMargin(20)?.bonus]).toEqual([null, 3, 'difficult', 10])
+    expect([critHealDays(5, 'complex'), critHealDays(13, 'difficult'), critHealDays(2, 'simple'), critHealDays(6, 'deadly')]).toEqual([7, 2, 5, null])
+  })
+  it('heals REC a day, half if strenuous, +3 with Healing Hands (core p. 173)', async () => {
+    const { restDayHp } = await import('../model/injuries')
+    expect([restDayHp(5, false, false), restDayHp(5, true, false), restDayHp(5, false, true), restDayHp(5, true, true)]).toEqual([5, 2, 8, 5])
   })
 })

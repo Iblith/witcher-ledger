@@ -49,8 +49,9 @@ export interface CriticalWound {
   healed?: boolean
   // The wound's effect once treated, from the critical table (it often differs from the untreated one).
   treatedEffect?: string
-  // Healing progress: Healing Hands rounds or Healing spell uses that beat the wound's DC (errata p. 173).
-  // The table numbers aren't in the project's sources, so the player enters what the book says.
+  // The effect once stabilized but not yet healed by a doctor or mage (core p. 158).
+  stabilizedEffect?: string
+  // Healing progress: Healing Hands rounds, or Healing spell uses that beat the wound's DC (core p. 173-174).
   healBy?: 'doctor' | 'mage'
   healNeeded?: number
   healDone?: number
@@ -136,8 +137,10 @@ export interface Character {
   armor: Record<HitLocation, ArmorSlot>
   weapons: Weapon[]
   crits: CriticalWound[]
-  // Healing over time has begun: a DC:14 Healing Hands or First Aid check (errata p. 173).
+  // Healing over time has begun: a DC:14 Healing Hands or First Aid check (core p. 173).
+  // healedByDoctor: it was Healing Hands, worth +3 HP a day.
   healingStarted?: boolean
+  healedByDoctor?: boolean
   healingLog?: HealingEntry[]
   lifeEvents: LifeEvent[]
   conditions: string

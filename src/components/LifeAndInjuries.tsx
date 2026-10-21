@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { uid } from '../model/factory'
 import { derived } from '../model/combat'
-import { activeInjuries, blankInjury, canCountDown, cap, currentEffect, healHp, healingRest, healReady, SEVERITIES } from '../model/injuries'
+import { activeInjuries, blankInjury, canCountDown, cap, currentEffect, fromCritTable, healHp, healingRest, healReady, restDayHp, SEVERITIES } from '../model/injuries'
+import { critHealDays, critWound, CRIT_WOUNDS, HEALING_HANDS, HEALING_SPELL } from '../model/criticals'
 import {
   LIFE_EVENT_KINDS,
   type Character,
@@ -68,8 +69,35 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
                   ))}
                 </select>
               </div>
+              <label className="field">
+                <span className="field-label">From the critical tables</span>
+                <select
+                  value={critWound(w.description)?.name ?? ''}
+                  onChange={(e) => {
+                    const t = critWound(e.target.value)
+                    if (t) set({ crits: c.crits.map((x) => (x.id === w.id ? fromCritTable(x, t) : x)) })
+                  }}
+                >
+                  <option value="">Pick a wound (core p. 158-160)</option>
+                  {SEVERITIES.map((sv) => (
+                    <optgroup key={sv} label={cap(sv)}>
+                      {CRIT_WOUNDS.filter((t) => t.severity === sv).map((t) => (
+                        <option key={t.name} value={t.name}>
+                          {t.roll[0] === t.roll[1] ? t.roll[0] : `${t.roll[0]}-${t.roll[1]}`} · {t.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
               <TextField label="Injury" value={w.description} onChange={(v) => upd(w.id, { description: v })} placeholder="e.g. Cracked ribs" />
               <TextField label="Effect" value={w.effect ?? ''} onChange={(v) => upd(w.id, { effect: v })} placeholder="Penalty from the critical table" />
+              <TextField
+                label="Effect once stabilized"
+                value={w.stabilizedEffect ?? ''}
+                onChange={(v) => upd(w.id, { stabilizedEffect: v })}
+                placeholder="The table's stabilized effect"
+              />
               <TextField
                 label="Effect once treated"
                 value={w.treatedEffect ?? ''}
@@ -83,15 +111,19 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
                 </p>
               )}
               {w.treated && canCountDown(w) && <HealTracker w={w} upd={(patch) => upd(w.id, patch)} />}
-              {w.severity === 'deadly' && (
+              {w.severity === 'deadly' ? (
                 <p className="hint">
-                  Deadly wounds aren't on the Critical Healing table, and their permanent penalties stay even after Healing Rest (errata p. 103, 174).
+                  A doctor or mage can still treat a Deadly wound, but its treated effect is permanent, even after Healing Rest (core p. 113, 174).
+                </p>
+              ) : (
+                <p className="hint">
+                  Once treated, the penalty fades after {critHealDays(c.stats.BODY, w.severity)} days at BODY {c.stats.BODY} (Critical Healing, core p. 174).
                 </p>
               )}
               <div className="injury-actions">
                 <label className="check">
                   <input type="checkbox" checked={w.treated} onChange={(e) => upd(w.id, { treated: e.target.checked })} />
-                  Treated
+                  Stabilized (First Aid at DC {HEALING_HANDS[w.severity].dc})
                 </label>
                 <span className="toolbar-spacer" />
                 <button type="button" className={'btn' + (healReady(w) ? ' btn-primary' : '')} onClick={() => upd(w.id, { healed: true })}>
@@ -129,9 +161,12 @@ export function Injuries({ c, set }: { c: Character; set: Setter }) {
 }
 
 // HP healing and a record of it. Healing over time only starts after a DC:14 Healing Hands or First Aid
-// check (errata p. 173); how much comes back each day is in the core book, so the player enters it.
+// check; then each day of rest brings back REC, half if strenuous, +3 with Healing Hands (core p. 173).
 function Healing({ c, set }: { c: Character; set: Setter }) {
   const max = derived(c).maxHp
+  const rec = derived(c).rec
+  const [strenuous, setStrenuous] = useState(false)
+  const dayHp = restDayHp(rec, strenuous, !!c.healedByDoctor)
   const [amount, setAmount] = useState(1)
   const [source, setSource] = useState('Rest')
   const [when, setWhen] = useState('')
@@ -149,6 +184,10 @@ function Healing({ c, set }: { c: Character; set: Setter }) {
         <input type="checkbox" checked={!!c.healingStarted} disabled={full} onChange={(e) => set({ healingStarted: e.target.checked })} />
         Healing started (someone passed a DC:14 Healing Hands or First Aid check)
       </label>
+      <label className="check">
+        <input type="checkbox" checked={!!c.healedByDoctor} onChange={(e) => set({ healedByDoctor: e.target.checked })} />
+        It was Healing Hands (+3 HP a day)
+      </label>
       <div className="healing-form">
         <NumberField label="HP" value={amount} min={1} onChange={setAmount} />
         <TextField label="From" value={source} onChange={setSource} list="heal-sources" />
@@ -164,7 +203,20 @@ function Healing({ c, set }: { c: Character; set: Setter }) {
         </button>
       </div>
       <div className="injury-actions">
-        <button type="button" className="btn" disabled={full} onClick={() => set(healHp(c, 3, 'Magic Healing', when.trim()))} title="Errata p. 103: 3 HP per turn">
+        <button
+          type="button"
+          className="btn"
+          disabled={full || !c.healingStarted}
+          onClick={() => set(healHp(c, dayHp, strenuous ? 'Day of rest (strenuous)' : 'Day of rest', when.trim()))}
+          title="Core p. 173: REC per day of rest, half if strenuous, +3 with Healing Hands"
+        >
+          Day of rest +{dayHp} HP
+        </button>
+        <label className="check">
+          <input type="checkbox" checked={strenuous} onChange={(e) => setStrenuous(e.target.checked)} />
+          Strenuous day
+        </label>
+        <button type="button" className="btn" disabled={full} onClick={() => set(healHp(c, 3, 'Magic Healing', when.trim()))} title="Magic Healing spell, core p. 103: 3 HP per round for 1d10 rounds">
           Magic Healing turn +3 HP
         </button>
         <ConfirmButton
@@ -175,7 +227,7 @@ function Healing({ c, set }: { c: Character; set: Setter }) {
       </div>
       {!c.healingStarted && !full && <p className="hint">Rest won't bring HP back until the healing process has been started.</p>}
       <p className="hint">
-        Healing Rest restores full HP and heals every treated critical wound (errata p. 103). Daily healing amounts are in the core book.
+        Healing Rest (Melitele's invocation) restores full HP and heals every treated critical wound (core p. 113).
       </p>
       {log.length > 0 && (
         <ul className="history-list">
@@ -207,7 +259,13 @@ function HealTracker({ w, upd }: { w: CriticalWound; upd: (patch: Partial<Critic
       <div className="healing-form">
         <label className="field">
           <span className="field-label">Healed by</span>
-          <select value={by} onChange={(e) => upd({ healBy: e.target.value as 'doctor' | 'mage' })}>
+          <select
+            value={by}
+            onChange={(e) => {
+              const v = e.target.value as 'doctor' | 'mage'
+              upd({ healBy: v, healNeeded: v === 'doctor' ? HEALING_HANDS[w.severity].turns : HEALING_SPELL[w.severity].uses })
+            }}
+          >
             <option value="doctor">Doctor</option>
             <option value="mage">Mage</option>
           </select>
@@ -230,8 +288,12 @@ function HealTracker({ w, upd }: { w: CriticalWound; upd: (patch: Partial<Critic
       )}
       <p className="hint">
         {healReady(w)
-          ? 'Done: mark the wound healed once the last roll beats its DC.'
-          : `${unit}. Take the number and DC for this severity from the ${by === 'doctor' ? 'Healing Hands' : 'Healing Spell'} table in your book (errata p. 173).`}
+          ? by === 'doctor'
+            ? `Done: the doctor's Healing Hands roll must beat DC ${HEALING_HANDS[w.severity].dc}, then the wound is treated.`
+            : 'Done: the wound is treated.'
+          : by === 'doctor'
+            ? `${HEALING_HANDS[w.severity].turns} rounds of work, then a Healing Hands roll over DC ${HEALING_HANDS[w.severity].dc} (core p. 174).`
+            : `${HEALING_SPELL[w.severity].uses} Healing spells, each beating DC ${HEALING_SPELL[w.severity].dc} (core p. 174).`}
       </p>
     </div>
   )
