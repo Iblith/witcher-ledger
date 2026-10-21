@@ -102,11 +102,12 @@ export interface Spell {
 export interface BestiaryInfo {
   category: string
   threat: string
-  // 'journal': copied from A Witcher's Journal. Missing: an estimate of a core rulebook creature.
-  source?: 'journal'
-  // Journal page, or the core rulebook page where the errata cites one.
+  // 'journal': copied from A Witcher's Journal. 'core': copied from the core rulebook bestiary.
+  // Missing: an estimate (a creature neither book covers, or a copy seeded before the book arrived).
+  source?: 'journal' | 'core'
+  // The page in the book it came from.
   page: number | null
-  // What the v4 errata confirms about an estimated creature. Everything else is an estimate.
+  // Older estimates only: what the errata confirmed about the creature.
   confirmed: string
   // The GM ticks this once they have compared the stats with their book.
   checked: boolean

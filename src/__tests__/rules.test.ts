@@ -229,7 +229,7 @@ describe('bestiary', () => {
     const entries = entriesFromTemplate(ghoul, 3)
     expect(entries.map((e) => e.name)).toEqual(['Ghoul 1', 'Ghoul 2', 'Ghoul 3'])
     expect(entries.every((e) => e.characterId === null && e.kind === 'monster' && e.hp.current === ghoul.hp.current)).toBe(true)
-    // Ghoul RUN is 18 per the errata.
+    // Ghoul RUN is 18 (core p. 278).
     expect(derived(ghoul).run).toBe(18)
   })
 })

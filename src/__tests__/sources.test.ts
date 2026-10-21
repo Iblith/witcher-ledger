@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { rollFlat } from '../rules/dice'
 import { derive, SKILL_BY_ID, type Stats } from '../rules/rules'
 import { castSpell, derived, recoverAction, staCostNumber, toCombatant } from '../model/combat'
-import { applyJournalUpdate, BESTIARY, bestiaryCharacter, RETIRED_ESTIMATES } from '../model/bestiary'
+import { applyCoreBestiaryUpdate, applyJournalUpdate, BESTIARY, bestiaryCharacter, bestiaryId, RETIRED_ESTIMATES } from '../model/bestiary'
 import { JOURNAL_MONSTERS, journalCharacter, journalId } from '../model/journalBestiary'
 import { advanceTurn, applyDamage, defenseBase, entryFromCharacter, entryState, monsterEntries, newEncounter, recoverStamina, spendStamina, takeDefense } from '../model/encounter'
 import { newCharacter } from '../model/factory'
@@ -140,7 +140,7 @@ describe("A Witcher's Journal bestiary", () => {
   })
   it('the one-time update drops untouched retired estimates and keeps checked or edited ones', () => {
     const old = BESTIARY.map(bestiaryCharacter)
-    const retired = ['Bear', 'Harpy', 'Leshen', 'Rock troll'].map((n) => bestiaryCharacter({ ...BESTIARY[0], name: n }))
+    const retired = ['Bear', 'Harpy', 'Leshen'].map((n) => bestiaryCharacter({ ...BESTIARY[0], name: n }))
     retired[0].bestiary!.checked = true
     retired[1].updatedAt += 1000
     const next = applyJournalUpdate([...old, ...retired])
@@ -248,5 +248,43 @@ describe('critical wounds and healing from the core book', () => {
   it('heals REC a day, half if strenuous, +3 with Healing Hands (core p. 173)', async () => {
     const { restDayHp } = await import('../model/injuries')
     expect([restDayHp(5, false, false), restDayHp(5, true, false), restDayHp(5, false, true), restDayHp(5, true, true)]).toEqual([5, 2, 8, 5])
+  })
+})
+
+describe('core rulebook bestiary (core p. 270-310)', () => {
+  const book = BESTIARY.filter((b) => !b.estimate)
+  it('copies every book creature with its page and marks the two estimates', () => {
+    expect(book).toHaveLength(21)
+    expect(BESTIARY.filter((b) => b.estimate).map((b) => b.name)).toEqual(['Nightwraith', 'Ekimmara'])
+    for (const b of book) {
+      expect(b.page, b.name).toBeGreaterThanOrEqual(270)
+      expect(bestiaryCharacter(b).bestiary?.source).toBe('core')
+    }
+  })
+  it('spot checks the book numbers', () => {
+    const get = (n: string) => bestiaryCharacter(BESTIARY.find((b) => b.name === n)!)
+    const griffin = get('Griffin')
+    expect([griffin.hp.current, griffin.sta.current, griffin.armor.torso.sp]).toEqual([100, 50, 8])
+    expect(griffin.weapons.map((w) => [w.name, w.damage])).toEqual([['Claws', '6d6'], ['Bite', '7d6+2']])
+    const bandit = get('Bandit')
+    expect([bandit.hp.current, bandit.armor.head.sp, bandit.skills.swordsmanship]).toEqual([20, 5, 6])
+    expect(get('Mage').vigor).toBe(10)
+    expect(get('Rock troll').armor.torso.sp).toBe(20)
+  })
+  it('the one-time update replaces untouched estimates, keeps edited ones and adds the new creatures', () => {
+    const estimate = (name: string) => {
+      const c = bestiaryCharacter({ ...BESTIARY[0], name, estimate: true })
+      c.id = bestiaryId(name)
+      return c
+    }
+    const ghoul = estimate('Ghoul')
+    const edited = estimate('Wolf')
+    edited.updatedAt += 1000
+    const next = applyCoreBestiaryUpdate([ghoul, edited])
+    expect(next.find((c) => c.id === ghoul.id)?.bestiary?.source).toBe('core')
+    expect(next.find((c) => c.id === edited.id)?.bestiary?.source).toBeUndefined()
+    expect(next.map((c) => c.id)).toEqual(expect.arrayContaining([bestiaryId('Mage'), bestiaryId('Rock troll')]))
+    expect(next).toHaveLength(book.length)
+    expect(applyCoreBestiaryUpdate(next)).toHaveLength(next.length)
   })
 })

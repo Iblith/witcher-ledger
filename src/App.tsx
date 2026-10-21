@@ -8,7 +8,7 @@ import { CheatSheet, CheatTopics } from './components/CheatSheet'
 import { EncounterTracker } from './components/EncounterTracker'
 import { Sheet } from './components/Sheet'
 import { ConfirmButton } from './components/fields'
-import { applyJournalUpdate, missingBestiary } from './model/bestiary'
+import { applyCoreBestiaryUpdate, applyJournalUpdate, missingBestiary } from './model/bestiary'
 import { JOURNAL_TITLE } from './model/journalBestiary'
 import { missingNpcPack } from './model/npcPack'
 import { applyCampaignUpdate, nameCaptain } from './model/campaign'
@@ -30,6 +30,7 @@ const SEEDED_KEY = `${STORAGE_PREFIX}:bestiary-seeded`
 const NPC_PACK_KEY = `${STORAGE_PREFIX}:npc-pack-1-seeded`
 const JOURNAL_KEY = `${STORAGE_PREFIX}:journal-bestiary-seeded`
 const CAMPAIGN_KEY = `${STORAGE_PREFIX}:campaign-update-2026-10-21`
+const CORE_BESTIARY_KEY = `${STORAGE_PREFIX}:core-bestiary-2026-10-21`
 
 function storageFlag(key: string, value?: string): string | null {
   try {
@@ -47,7 +48,9 @@ function initialCharacters(): Character[] {
   if (!IS_GM) return list
   const seeded = storageFlag(SEEDED_KEY) ? list : [...list, ...missingBestiary(list)]
   // A Witcher's Journal monsters arrived later and replace four estimates, once.
-  const withBestiary = storageFlag(JOURNAL_KEY) ? seeded : applyJournalUpdate(seeded)
+  const withJournal = storageFlag(JOURNAL_KEY) ? seeded : applyJournalUpdate(seeded)
+  // The core rulebook's stat blocks replace the untouched estimates and add Mage and Rock troll, once.
+  const withBestiary = storageFlag(CORE_BESTIARY_KEY) ? withJournal : applyCoreBestiaryUpdate(withJournal)
   // The original NPC pack arrived after the bestiary, so it has its own once-only flag.
   const withPack = storageFlag(NPC_PACK_KEY) ? withBestiary : [...withBestiary, ...missingNpcPack(withBestiary)]
   // The campaign villain and his captain, two more Journal monsters, and a trimmed pack, once.
@@ -79,6 +82,7 @@ export default function App() {
       storageFlag(JOURNAL_KEY, '1')
       storageFlag(NPC_PACK_KEY, '1')
       storageFlag(CAMPAIGN_KEY, '1')
+      storageFlag(CORE_BESTIARY_KEY, '1')
     }
   }, [])
   useEffect(() => encounterRepo.save(encounters), [encounters])
@@ -395,6 +399,21 @@ function BestiaryNote({ c, onChange }: { c: Character; onChange: (c: Character) 
         </p>
       </section>
     )
+  if (b.source === 'core')
+    return (
+      <section className="panel bestiary-note bestiary-checked">
+        <div className="bestiary-head">
+          <strong>
+            {b.category} · {b.threat} · core rulebook p. {b.page}
+          </strong>
+          <span className="sev-pill sev-simple">From the book</span>
+        </div>
+        <p className="hint">
+          Stats, skills, armor, weapons, abilities and vulnerabilities are copied from the core rulebook bestiary. Read the page for loot and
+          the full ability wording.
+        </p>
+      </section>
+    )
   return (
     <section className={'panel bestiary-note' + (b.checked ? ' bestiary-checked' : '')}>
       <div className="bestiary-head">
@@ -406,13 +425,15 @@ function BestiaryNote({ c, onChange }: { c: Character; onChange: (c: Character) 
       </div>
       <p className="hint">
         {b.checked
-          ? 'You marked these stats as checked against your book.'
-          : 'These numbers are estimates, not copied from the core rulebook (which this app has no copy of). Compare them with your book and fix anything that differs.'}
+          ? 'You marked these stats as checked.'
+          : b.page
+            ? 'An estimate seeded before the core rulebook arrived, kept because you edited it. Compare it with the book page and fix anything that differs.'
+            : "This creature isn't in the core rulebook or A Witcher's Journal, so these numbers are the app's estimates."}
       </p>
       {b.confirmed && <p className="hint">Confirmed by the errata: {b.confirmed}</p>}
       <label className="check">
         <input type="checkbox" checked={b.checked} onChange={(e) => onChange({ ...c, bestiary: { ...b, checked: e.target.checked } })} />
-        I've checked these stats against my book
+        I've checked these stats
       </label>
     </section>
   )

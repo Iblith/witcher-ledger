@@ -106,7 +106,7 @@ export function journalCharacter(m: JournalMonster): Character {
     m.susceptibilities && `Susceptible: ${m.susceptibilities}`,
     `Defense bases: Dodge ${m.dodge}, Reposition ${m.reposition ?? '—'}, Block ${m.block}`,
     `Bounty ${m.bounty} crowns · ${m.environment} · ${m.organization}`,
-    m.category === 'Beast' ? '' : 'Monsters (except beasts) take half damage from non-silver weapons, but not from fire (errata p. 162).',
+    m.category === 'Beast' ? '' : 'Monsters (except beasts) take half damage from any weapon not made of silver (core p. 162).',
   ]
     .filter(Boolean)
     .join('\n')

@@ -788,7 +788,7 @@ function AddDialog(props: {
             {template && (
               <p className="hint">
                 {template.bestiary
-                  ? `${template.bestiary.threat} · HP ${template.hp.maxOverride ?? template.hp.current} · ${template.bestiary.source === 'journal' ? `A Witcher's Journal p. ${template.bestiary.page}` : template.bestiary.checked ? 'Checked against the book' : 'Estimated stats, not yet checked against the book'}`
+                  ? `${template.bestiary.threat} · HP ${template.hp.maxOverride ?? template.hp.current} · ${template.bestiary.source === 'journal' ? `A Witcher's Journal p. ${template.bestiary.page}` : template.bestiary.source === 'core' ? `Core rulebook p. ${template.bestiary.page}` : template.bestiary.checked ? 'Checked' : 'Estimated stats'}`
                   : `${template.notes.split('\n')[0]} · HP ${template.hp.maxOverride ?? template.hp.current}`}
               </p>
             )}
