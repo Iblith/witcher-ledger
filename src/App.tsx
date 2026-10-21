@@ -11,7 +11,7 @@ import { ConfirmButton } from './components/fields'
 import { applyCoreBestiaryUpdate, applyJournalUpdate, missingBestiary } from './model/bestiary'
 import { JOURNAL_TITLE } from './model/journalBestiary'
 import { missingNpcPack } from './model/npcPack'
-import { applyCampaignUpdate, nameCaptain } from './model/campaign'
+import { applyCampaignGearUpdate, applyCampaignUpdate, nameCaptain } from './model/campaign'
 import { derived } from './model/combat'
 import { currentEntry, isNameOnlySheet, newEncounter, sampleEncounter, writeBack, type Encounter } from './model/encounter'
 import { newCharacter, newPlayer, sampleCharacters, uid } from './model/factory'
@@ -31,6 +31,7 @@ const NPC_PACK_KEY = `${STORAGE_PREFIX}:npc-pack-1-seeded`
 const JOURNAL_KEY = `${STORAGE_PREFIX}:journal-bestiary-seeded`
 const CAMPAIGN_KEY = `${STORAGE_PREFIX}:campaign-update-2026-10-21`
 const CORE_BESTIARY_KEY = `${STORAGE_PREFIX}:core-bestiary-2026-10-21`
+const CAMPAIGN_GEAR_KEY = `${STORAGE_PREFIX}:campaign-book-gear-2026-10-21`
 
 function storageFlag(key: string, value?: string): string | null {
   try {
@@ -54,7 +55,9 @@ function initialCharacters(): Character[] {
   // The original NPC pack arrived after the bestiary, so it has its own once-only flag.
   const withPack = storageFlag(NPC_PACK_KEY) ? withBestiary : [...withBestiary, ...missingNpcPack(withBestiary)]
   // The campaign villain and his captain, two more Journal monsters, and a trimmed pack, once.
-  const withCampaign = storageFlag(CAMPAIGN_KEY) ? withPack : applyCampaignUpdate(withPack)
+  const withCampaignNpcs = storageFlag(CAMPAIGN_KEY) ? withPack : applyCampaignUpdate(withPack)
+  // The Captain's and the deserters' gear moved to core rulebook items, once.
+  const withCampaign = storageFlag(CAMPAIGN_GEAR_KEY) ? withCampaignNpcs : applyCampaignGearUpdate(withCampaignNpcs)
   // Names typed into the tracker's old party list become players on the Players tab.
   const known = new Set(withCampaign.filter((c) => c.kind === 'pc').map((c) => c.name.trim().toLowerCase()))
   const legacy = takeLegacyPartyNames().filter((n) => !known.has(n.toLowerCase()))
@@ -83,6 +86,7 @@ export default function App() {
       storageFlag(NPC_PACK_KEY, '1')
       storageFlag(CAMPAIGN_KEY, '1')
       storageFlag(CORE_BESTIARY_KEY, '1')
+      storageFlag(CAMPAIGN_GEAR_KEY, '1')
     }
   }, [])
   useEffect(() => encounterRepo.save(encounters), [encounters])

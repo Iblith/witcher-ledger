@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyCampaignUpdate, campaignNpcs, CAMPAIGN_IDS, CAPTAIN_NAME, nameCaptain } from '../model/campaign'
+import { applyCampaignGearUpdate, applyCampaignUpdate, campaignNpcs, CAMPAIGN_IDS, CAPTAIN_NAME, nameCaptain } from '../model/campaign'
 import { effectiveStat, toCombatant } from '../model/combat'
 import {
   duplicateEntry,
@@ -49,12 +49,41 @@ describe('campaign NPCs', () => {
     expect(nameCaptain([{ ...cap, name: 'Ser Grim' }])[0].name).toBe('Ser Grim')
   })
 
-  it('puts the Captain in full plate with a heavy longsword, EV counted once', () => {
+  it('puts the Captain in book full plate with a Torrwr, EV 3 counted once (core p. 73, 79-80)', () => {
     const cap = list.find((c) => c.id === 'campaign-captain')!
-    expect(Object.values(cap.armor).every((a) => a.piece === 'Fitted full plate' && a.sp >= 20)).toBe(true)
+    expect(Object.values(cap.armor).every((a) => a.sp === 20)).toBe(true)
+    expect([cap.armor.head.piece, cap.armor.torso.piece, cap.armor.lLeg.piece]).toEqual(['Great Helm', 'Plate Armor', 'Plate Greaves'])
     expect(effectiveStat(cap, 'REF')).toBe(cap.stats.REF - 3)
-    expect(cap.weapons[0].damage).toBe('6d6')
-    expect(cap.weapons[0].skillId).toBe('swordsmanship')
+    expect(effectiveStat(cap, 'DEX')).toBe(cap.stats.DEX - 3)
+    const sword = cap.weapons[0]
+    expect([sword.damage, sword.skillId, sword.hands, sword.effect]).toEqual(['6d6', 'swordsmanship', 2, 'Bleeding (50%)'])
+    expect(cap.hp.current).toBe(60)
+    expect(cap.perks).toContain('add 2d6 damage')
+  })
+
+  it('arms the deserters with book gear (core p. 73-74, 79-80)', () => {
+    const d = list.find((c) => c.id === 'campaign-deserter')!
+    expect([d.armor.head.sp, d.armor.torso.sp, d.armor.rLeg.sp]).toEqual([5, 8, 8])
+    expect(d.weapons.map((w) => [w.name, w.damage, w.effect])).toEqual([
+      ['Arming Sword', '2d6+4', ''],
+      ['Crossbow', '4d6+2', 'Slow Reload'],
+    ])
+  })
+
+  it('moves an older Captain and deserter onto the book gear, keeping armor wear and other edits', () => {
+    const cap = list.find((c) => c.id === 'campaign-captain')!
+    const old: Character = {
+      ...cap,
+      name: 'Ser Grim',
+      hp: { ...cap.hp, current: 31 },
+      armor: Object.fromEntries(Object.entries(cap.armor).map(([l, a]) => [l, { ...a, piece: 'Fitted full plate', sp: l === 'torso' ? 22 : 25, maxSp: 25 }])) as Character['armor'],
+      weapons: [{ ...cap.weapons[0], name: 'Longsword "Last Orders"', effect: 'Armor Piercing, Bleeding (50%), Balanced' }, ...cap.weapons.slice(1)],
+    }
+    const [next] = applyCampaignGearUpdate([old])
+    expect([next.name, next.hp.current]).toEqual(['Ser Grim', 31])
+    expect([next.armor.torso.sp, next.armor.head.sp]).toEqual([17, 20])
+    expect(next.weapons[0].name).toBe('Torrwr "Last Orders"')
+    expect(applyCampaignGearUpdate([next])[0]).toBe(next)
   })
 })
 
